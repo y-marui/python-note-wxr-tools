@@ -33,6 +33,7 @@ uv run note-wxr-to-md <export.zip|dir> --out <dir>
 - 既存ファイルは `--force` を付けない限り上書きしない。
 - タイトルが空・重複する記事は `--rename "<guid>=<新タイトル>"` で解決する。
 - 情報が失われる変換は失敗する。警告に下げるには `--allow-lossy` を付ける。
+- `--against <posts dir>` は書き出さずに差分だけを報告する（`--out` とは併用不可）。手で取り込んだ原稿と `platform_post_id` で照合し、プロパティと本文の差分を出す。posts 側には一切書き込まない。
 - 仕様は [docs/specification.md](docs/specification.md) を参照。
 
 ### note-wxr-validate

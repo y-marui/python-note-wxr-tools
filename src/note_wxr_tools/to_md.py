@@ -10,7 +10,8 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
 
-from note_wxr_tools import manifest
+from note_wxr_tools import against, manifest
+from note_wxr_tools.frontmatter import parse as parse_front_matter
 from note_wxr_tools.htmlmd import Block, convert_body, sha256
 from note_wxr_tools.wxr import ASSETS_PREFIX, Export, ExportError, Item, Source, parse
 
@@ -69,6 +70,7 @@ class Report:
     articles: int = 0
     images: int = 0
     warnings: list[str] = field(default_factory=list)
+    comparison: against.Comparison | None = None
 
 
 @dataclass
@@ -112,7 +114,9 @@ class _Converter:
         out: Path,
         allow_lossy: bool,
         renames: dict[str, str],
+        lenient_titles: bool = False,
     ) -> None:
+        self.lenient_titles = lenient_titles
         self.source = source
         self.export = export
         self.allow_lossy = allow_lossy
@@ -159,6 +163,8 @@ class _Converter:
             guid = item.fields.get("guid", "")
             title = self.renames.get(guid, item.fields.get("title", ""))
             stem = sanitize_filename(title)
+            if self.lenient_titles and (not stem or stem in seen):
+                stem = f"untitled-{guid}"
             if not stem or stem in (".", ".."):
                 self.plan.errors.append(
                     f"empty or unusable title for {guid}"
@@ -292,18 +298,49 @@ class _Converter:
         )
 
 
+def _compare_against(plan: _Plan, posts: Path) -> against.Comparison:
+    generated = {}
+    for path, data in plan.files.items():
+        if path.suffix != ".md":
+            continue
+        props, body = parse_front_matter(data.decode("utf-8"))
+        generated[props["platform_post_id"]] = against.Generated(
+            props["title"], props, body
+        )
+    return against.compare(generated, posts)
+
+
 def convert(
     source: Path,
-    out: Path,
+    out: Path | None = None,
     *,
     force: bool = False,
     allow_lossy: bool = False,
     renames: dict[str, str] | None = None,
+    against_dir: Path | None = None,
 ) -> Report:
-    """Convert ``source`` into ``out`` and return a summary."""
+    """Convert ``source`` into ``out`` and return a summary.
+
+    With ``against_dir`` nothing is written: the articles are only compared
+    with the manuscripts already in that directory.
+    """
     reader = Source(source)
     export = parse(reader.read_xml())
-    plan = _Converter(reader, export, out, allow_lossy, renames or {}).run()
+    plan = _Converter(
+        reader,
+        export,
+        out or Path("."),
+        allow_lossy,
+        renames or {},
+        lenient_titles=against_dir is not None,
+    ).run()
+    if against_dir is not None:
+        if plan.errors:
+            raise ConversionError("\n".join(plan.errors))
+        if not against_dir.is_dir():
+            raise ConversionError(f"not a directory: {against_dir}")
+        plan.report.comparison = _compare_against(plan, against_dir)
+        return plan.report
     if not force:
         existing = sorted(str(p) for p in plan.files if p.exists())
         if existing:
@@ -332,7 +369,14 @@ def main(argv: Sequence[str] | None = None) -> int:
         description="Convert a note WXR export into Markdown manuscripts.",
     )
     parser.add_argument("source", type=Path, help="export ZIP or extracted directory")
-    parser.add_argument("--out", type=Path, required=True, help="output directory")
+    parser.add_argument("--out", type=Path, help="output directory")
+    parser.add_argument(
+        "--against",
+        type=Path,
+        metavar="POSTS_DIR",
+        help="only report differences from the manuscripts in POSTS_DIR "
+        "(matched by platform_post_id); writes nothing",
+    )
     parser.add_argument("--force", action="store_true", help="overwrite existing files")
     parser.add_argument(
         "--allow-lossy",
@@ -348,10 +392,13 @@ def main(argv: Sequence[str] | None = None) -> int:
         help="use TITLE for the article with GUID (repeatable)",
     )
     args = parser.parse_args(argv)
+    if (args.out is None) == (args.against is None):
+        parser.error("give exactly one of --out and --against")
     try:
         report = convert(
             args.source,
             args.out,
+            against_dir=args.against,
             force=args.force,
             allow_lossy=args.allow_lossy,
             renames=dict(args.rename),
@@ -361,6 +408,11 @@ def main(argv: Sequence[str] | None = None) -> int:
         return 1
     for warning in report.warnings:
         print(f"warning: {warning}", file=sys.stderr)
+    if report.comparison is not None:
+        for warning in report.comparison.warnings:
+            print(f"warning: {warning}", file=sys.stderr)
+        print(against.format_report(report.comparison))
+        return 0
     print(f"wrote {report.articles} article(s), {report.images} image(s)")
     return 0
 

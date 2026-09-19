@@ -10,6 +10,7 @@
 | `manifest.py` | Builds `manifest.json` and the overall body hash |
 | `frontmatter.py` | Parses the flat front matter of a manuscript |
 | `validate.py` | Checks an account folder against the specification; also the CLI. `note-md-to-wxr` calls `validate()` first |
+| `against.py` | Read-only comparison of generated manuscripts with a posts directory (`--against`) |
 | `mdhtml.py` | Inverse of `htmlmd`: splits a manuscript body into blocks and converts an edited block back to HTML |
 | `wxrwriter.py` | Renders the WXR document in note's element order and CDATA style |
 | `to_wxr.py` | Aligns manuscript and sidecar blocks, rebuilds items, writes the ZIP and manifest; also the CLI |
