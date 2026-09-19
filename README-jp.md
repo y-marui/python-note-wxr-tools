@@ -46,6 +46,18 @@ uv run note-wxr-validate <dir>
 - 必須プロパティ、画像の参照先、サイドカーのハッシュ、`manifest.json` とディスクの一致を確認する。
 - `note-wxr-to-md` は同じフォルダに `manifest.json` を書き出す。
 
+### note-md-to-wxr
+
+原稿を note にインポートできる ZIP に戻す。原稿は同じアカウントフォルダのものを明示的に指定する。
+
+```sh
+uv run note-md-to-wxr <article.md>... --out <dir>
+```
+
+- 先に validator を実行し、失敗したら何も書かない。
+- 編集していないブロックは元の HTML を再利用し、編集したブロックだけ Markdown から再生成する。
+- `--out` に `note-<アカウント>-1.zip` と `manifest.json` を出力する。既存ファイルは `--force` なしでは上書きしない。
+
 ### Development commands
 
 ```sh

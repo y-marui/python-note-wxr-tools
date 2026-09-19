@@ -1,6 +1,6 @@
 # Architecture
 
-`note-wxr-to-md` (#2) and `note-wxr-validate` (#4) share these modules:
+`note-wxr-to-md` (#2), `note-wxr-validate` (#4) and `note-md-to-wxr` (#3) share these modules:
 
 | Module | Role |
 |---|---|
@@ -10,8 +10,9 @@
 | `manifest.py` | Builds `manifest.json` and the overall body hash |
 | `frontmatter.py` | Parses the flat front matter of a manuscript |
 | `validate.py` | Checks an account folder against the specification; also the CLI. `note-md-to-wxr` calls `validate()` first |
+| `mdhtml.py` | Inverse of `htmlmd`: splits a manuscript body into blocks and converts an edited block back to HTML |
+| `wxrwriter.py` | Renders the WXR document in note's element order and CDATA style |
+| `to_wxr.py` | Aligns manuscript and sidecar blocks, rebuilds items, writes the ZIP and manifest; also the CLI |
 
 All output is planned in memory first; nothing is written when any error
 remains or when an existing file would be overwritten without `--force`.
-
-`note-md-to-wxr` is added with #3.

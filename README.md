@@ -46,6 +46,18 @@ uv run note-wxr-validate <dir>
 - Checks required properties, image references, sidecar hashes and that `manifest.json` matches the files on disk.
 - `note-wxr-to-md` writes `manifest.json` into the same folder.
 
+### note-md-to-wxr
+
+Turn manuscripts back into a note-importable ZIP. Give explicit article paths from one account folder.
+
+```sh
+uv run note-md-to-wxr <article.md>... --out <dir>
+```
+
+- Runs the validator first and writes nothing if it fails.
+- Unedited blocks reuse their original HTML; only edited blocks are regenerated from Markdown.
+- Writes `note-<account>-1.zip` and `manifest.json` into `--out`. Existing files are not overwritten without `--force`.
+
 ### Development commands
 
 ```sh

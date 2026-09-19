@@ -39,5 +39,14 @@ src/note_wxr_tools/
     - used by: CLI エントリポイント `note-wxr-to-md`
   validate.py
     - imports: manifest, frontmatter, htmlmd
-    - used by: CLI エントリポイント `note-wxr-validate`
+    - used by: to_wxr, CLI エントリポイント `note-wxr-validate`
+  mdhtml.py
+    - imports: htmlmd
+    - used by: to_wxr
+  wxrwriter.py
+    - imports: (標準ライブラリのみ)
+    - used by: to_wxr
+  to_wxr.py
+    - imports: manifest, frontmatter, htmlmd, mdhtml, to_md, validate, wxr, wxrwriter
+    - used by: CLI エントリポイント `note-md-to-wxr`
 ```

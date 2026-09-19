@@ -75,6 +75,38 @@ The remaining item fields live in the sidecar.
   (`note-<account>-N.xml` and `assets/`). Image references stay
   `/assets/...` by default.
 
+## `note-md-to-wxr` output
+
+`note-md-to-wxr <article.md>... --out <dir>` takes articles from one account
+folder and writes, into `<dir>`:
+
+- `note-<account>-1.zip` holding `note-<account>-1.xml` and `assets/<file>`.
+  Only images still referenced by the rebuilt bodies are included; each is
+  read from `<title>-img/<file>`. The ZIP entries have a fixed timestamp.
+- `manifest.json` describing that output (`command` is `note-md-to-wxr`).
+  `articles[].body_sha256` is the hash of the rebuilt `content:encoded`.
+
+It runs the validator on the whole account folder first and refuses to write
+on any error. `<item>` elements follow the `guids` order of
+`.note-channel.json`, and only the given articles are included; a guid missing
+from that list is an error.
+
+WXR fields are rebuilt from the front matter and the sidecar:
+
+| WXR field | Source |
+|---|---|
+| `title` | Sidecar `title`, unless the manuscript was renamed (then the front matter `title`) |
+| `link` | Front matter `publication_url`, else sidecar `link` |
+| `guid` | `platform_post_id` |
+| `wp:post_date`, `wp:post_modified` | `platform_created_at`, `platform_updated_at` (local part) |
+| `wp:post_date_gmt`, `wp:post_modified_gmt` | The same values converted to UTC |
+| `wp:status` | `draft` for `draft`; `publish` for `published` and `needs_update` |
+| everything else | Sidecar item fields |
+
+`pubDate` is taken from the sidecar and is not updated when the dates are
+edited. Element order and CDATA use follow note's export format, so an
+unedited export is reproduced byte for byte.
+
 ## Sidecar `<title>.note.json`
 
 Stored next to each article. It holds everything the Markdown cannot:
@@ -105,8 +137,19 @@ sidecar:
 - Markdown hash unchanged: the original HTML is reused verbatim.
 - Markdown edited: the block is regenerated from the Markdown.
 
+Manuscript blocks and sidecar blocks are aligned by their Markdown hashes
+(a longest-matching-subsequence diff), so edited, inserted and deleted blocks
+are all handled; deleted blocks drop out with their original HTML.
+
 If no block was edited, the reassembled body equals the original
 `content:encoded` (checked against the body hash).
+
+Regenerated blocks use the inverse of the Markdown subset (see Markdown
+body): `h1`-`h6`, `p` with inline `strong`, `em`, `code`, `a` and `br`,
+lists, `blockquote`, `hr`, `pre`, and an image-only block as
+`<figure><img ...><figcaption></figcaption></figure>`. A block that starts
+with an HTML tag is passed through as raw HTML. Regenerated blocks carry no
+`name` attributes.
 
 ## Markdown body
 
