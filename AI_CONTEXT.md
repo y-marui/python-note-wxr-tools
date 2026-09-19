@@ -23,8 +23,8 @@ AI はタスク開始時に以下の順で参照する:
 
 ## Project Overview
 
-**目的:** AI支援開発用の Python パッケージ/アプリケーションテンプレート。
-uv + Claude Code + GitHub Copilot 前提の OSS テンプレート。
+**目的:** note の WXR エクスポートと Markdown 原稿を相互変換する Python ツール（`note-wxr-to-md` / `md-to-note-wxr`）。
+uv + Claude Code + GitHub Copilot 前提の OSS。
 
 **チーム規模:** 個人〜3人（小規模チーム）。アジャイルで迅速な意思決定を重視。
 
@@ -38,28 +38,15 @@ uv + Claude Code + GitHub Copilot 前提の OSS テンプレート。
 **主要ディレクトリ:**
 
 ```
-src/project_name/   # パッケージ本体
+src/note_wxr_tools/   # パッケージ本体
 tests/unit/         # 単体テスト
 tests/integration/  # 統合テスト
 docs/               # 人間が書き・読む仕様書（AI は参照のみ）
 docs/dev-charter/   # 開発憲章（git subtree で取り込み）
-examples/           # 実装パターンサンプル
-```
-
-**モジュール構成と依存方向:**
 
 ```
-API → Service → Repository → Storage
-```
-逆依存禁止。循環依存禁止。
 
-**モジュール一覧:**
-
-| モジュール | 役割 |
-|---|---|
-| `core` | ビジネスロジック |
-| `api` | HTTP インターフェース |
-| `repository` | データアクセス |
+**モジュール構成:** 変換ロジックは `src/note_wxr_tools/` に置く。コマンドは `note-wxr-to-md` / `note-md-to-wxr` / `note-wxr-validate`。詳細な仕様は [docs/specification.md](docs/specification.md) と [#1](https://github.com/y-marui/python-note-wxr-tools/issues/1) を参照。
 
 **AI コンテキスト優先順位:**
 1. タスクコンテキスト（Issue / Pull Request）
@@ -183,6 +170,15 @@ API → Service → Repository → Storage
 
 ## Project-Specific Rules
 
+### Data Separation Policy
+
+このリポジトリは公開（OSS）であり、ツールのコードだけを置く。
+
+- 実際の note 記事・画像・WXR・マニフェスト・公開 URL は置かない（原稿の正本は個人 vault `y-marui/obsidian-vault` の `posts/`）
+- テストのフィクスチャは合成データだけを使う
+- 出力先の規則（`posts/README.md` の原稿本文・プロパティ・画像命名）は vault 側が定義し、本ツールは検証機能として実装する
+- 経緯: [obsidian-vault#7](https://github.com/y-marui/obsidian-vault/issues/7)
+
 ### Monetization Policy
 
 - 独自の課金システムは**原則禁止**（メンテナンスコスト・セキュリティリスクのため）
@@ -201,14 +197,6 @@ API → Service → Repository → Storage
 | `AI_CONTEXT.md` | 日本語（開発チーム内部ツール、ユーザー判断による） |
 
 日英両方のドキュメントが存在する場合は**日本語版を正本**として編集し、英語版をそれに合わせて更新する（英語版を独立して編集しない）。
-
-### Initial Template Setup
-
-テンプレートから新規プロジェクトを作成した直後は、以下を優先して実施する。
-
-1. `docs/dev-charter/topics/GITHUB_SETTINGS.md` に従い GitHub リポジトリ設定を適用する
-2. `README_TEMPLATE-jp.md` → `README-jp.md`、`README_TEMPLATE.md` → `README.md` にリネームしてテンプレート README を置き換える
-3. `LICENSE` の `[YEAR]` / `[AUTHOR]`、README / FUNDING の `{user}` / `{repo}` / `{workflow}` / `[USERNAME]` / `[BMC_USERNAME]` を実値に置き換える
 
 ### docs/ Role
 

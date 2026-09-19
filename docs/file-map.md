@@ -7,7 +7,7 @@
 各ファイルについて、主要な import 元・呼び出し元・呼び出し先を記録する。
 
 ```
-src/project_name/
+src/note_wxr_tools/
   __init__.py
     - exports: (公開シンボル)
 
@@ -21,7 +21,7 @@ src/project_name/
 <!-- 初回探索後にここへ追記する -->
 
 ```
-src/project_name/
+src/note_wxr_tools/
   __init__.py
     - (未記入)
 ```
