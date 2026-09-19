@@ -42,3 +42,6 @@ strict = true
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+# Tests that need a real export run only on request: pytest -m realdata
+addopts = "-m 'not realdata'"
+markers = ["realdata: needs a real note export (set NOTE_WXR_REALDATA_ZIP); local only"]
