@@ -1,4 +1,4 @@
-.PHONY: install lint format type test all update-charter
+.PHONY: install lint format type test test-realdata all update-charter
 
 install:
 	uv sync
@@ -14,6 +14,10 @@ type:
 
 test:
 	uv run pytest
+
+# Local only: needs NOTE_WXR_REALDATA_ZIP=/path/to/export.zip
+test-realdata:
+	uv run pytest -m realdata
 
 all: lint type test
 

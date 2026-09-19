@@ -70,6 +70,7 @@ make all    # lint + type + test
 | `make lint` | `ruff check .`（linting） |
 | `make type` | `mypy src`（型チェック） |
 | `make test` | `pytest`（テスト実行） |
+| `make test-realdata` | 実データの往復テスト（ローカル専用。`NOTE_WXR_REALDATA_ZIP` に実際のエクスポート ZIP を指定。CI では実行しない） |
 | `make all` | lint + type + test |
 
 ## License

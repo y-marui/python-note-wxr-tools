@@ -70,6 +70,7 @@ make all    # lint + type + test
 | `make lint` | `ruff check .` |
 | `make type` | `mypy src` |
 | `make test` | `pytest` |
+| `make test-realdata` | Round-trip test on a real export (local only; set `NOTE_WXR_REALDATA_ZIP` to an export ZIP; not run in CI) |
 | `make all` | lint + type + test |
 
 ## License

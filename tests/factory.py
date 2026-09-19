@@ -60,3 +60,48 @@ def write_export(
         for name, data in (assets or {}).items():
             archive.writestr(f"assets/{name}", data)
     return path
+
+
+# A body that mimics the shapes seen in real note exports: block `name`
+# attributes, newlines inside <b> in <h2>, figures (image, image with a link
+# caption, quote card), nested lists, links, code and blocks that stay raw HTML.
+REALISTIC_BODY = (
+    '<h2 name="zGAft"><b>Section one</b></h2>'
+    '<p name="Xcj05">　A paragraph with <strong>bold</strong> and '
+    '<a href="https://example.com/a" target="_blank" rel="noopener noreferrer">'
+    "a link</a>.<br></p>"
+    '<p name="09abee84-fa03-4f3f-aed7-51fdb4c4dcbb"><a href="https://example.com/b">'
+    "https://example.com/b</a></p>"
+    '<h2 name="9FK5D">\n<b>Section two</b><br>\n</h2>'
+    '<figure name="cc016517-709a-4c6d-b18b-dbe5853b3693"><img src="/assets/n1_a.png">'
+    "<figcaption></figcaption></figure>"
+    '<figure name="a1" id="a1"><img src="/assets/n1_b.png" alt="alt text" width="620" '
+    'height="413"><figcaption><a href="https://example.com/c" target="_blank" '
+    'rel="noopener noreferrer">caption</a></figcaption></figure>'
+    '<figure name="q1" id="q1"><blockquote><p name="q2" id="q2"><strong>quoted</strong>'
+    "<br></p></blockquote><figcaption></figcaption></figure>"
+    '<ul name="u1"><li>first<ul><li>nested</li></ul></li>'
+    "<li>second &amp; more</li></ul>"
+    '<ol name="o1"><li>one</li><li>two</li></ol>'
+    '<blockquote name="b1"><p name="b2">quote line one<br>quote line two</p>'
+    "</blockquote>"
+    '<p name="e1"></p>'
+    '<hr name="r1">'
+    "\n"
+    '<p name="last">Trailing paragraph 1. not a list &lt;tag&gt;</p>'
+)
+REALISTIC_ASSETS = {"n1_a.png": b"A" * 10, "n1_b.png": b"B" * 20}
+
+
+def realistic_items() -> list[str]:
+    """One published article with every shape above and one draft."""
+    return [
+        make_item(guid="n1", title="Published", body=REALISTIC_BODY, post_id=1),
+        make_item(
+            guid="n2",
+            title="Draft",
+            body='<p name="d">Draft text</p>',
+            status="draft",
+            post_id=2,
+        ),
+    ]
