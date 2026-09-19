@@ -35,6 +35,17 @@ uv run note-wxr-to-md <export.zip|dir> --out <dir>
 - 情報が失われる変換は失敗する。警告に下げるには `--allow-lossy` を付ける。
 - 仕様は [docs/specification.md](docs/specification.md) を参照。
 
+### note-wxr-validate
+
+変換した原稿フォルダ（アカウントフォルダ）を仕様に照らして検査する。エラーがあれば終了コード 1 を返す。
+
+```sh
+uv run note-wxr-validate <dir>
+```
+
+- 必須プロパティ、画像の参照先、サイドカーのハッシュ、`manifest.json` とディスクの一致を確認する。
+- `note-wxr-to-md` は同じフォルダに `manifest.json` を書き出す。
+
 ### Development commands
 
 ```sh

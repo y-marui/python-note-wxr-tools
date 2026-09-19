@@ -199,3 +199,24 @@ def test_main_reports_errors_with_exit_code_1(
     args = [export, "--out", str(tmp_path / "o"), "--rename", "n1=Named"]
     assert main(args) == 0
     assert "wrote 1 article(s)" in capsys.readouterr().out
+
+
+def test_convert_writes_manifest(make_export: MakeExport, tmp_path: Path) -> None:
+    body = '<figure><img src="/assets/a.png"><figcaption></figcaption></figure>'
+    export = make_export(
+        [make_item(body=body), make_item(guid="n2", title="Two", status="draft")],
+        {"a.png": b"PNG"},
+    )
+    out = tmp_path / "out"
+    convert(export, out, allow_lossy=True)
+
+    data = json.loads((_folder(out) / "manifest.json").read_text("utf-8"))
+    assert data["command"] == "note-wxr-to-md"
+    assert data["allow_lossy"] is True
+    assert (data["article_count"], data["image_count"], data["total_size"]) == (2, 1, 3)
+    assert [a["guid"] for a in data["articles"]] == ["n1", "n2"]
+    assert (
+        data["articles"][0]["body_sha256"] == hashlib.sha256(body.encode()).hexdigest()
+    )
+    paths = {i["path"] for i in data["inputs"]}
+    assert paths == {"note-acct_x-1.xml", "assets/a.png"}

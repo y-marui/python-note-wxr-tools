@@ -10,6 +10,7 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
 
+from note_wxr_tools import manifest
 from note_wxr_tools.htmlmd import Block, convert_body, sha256
 from note_wxr_tools.wxr import ASSETS_PREFIX, Export, ExportError, Item, Source, parse
 
@@ -117,6 +118,9 @@ class _Converter:
         self.allow_lossy = allow_lossy
         self.renames = renames
         self.plan = _Plan()
+        self.inputs: dict[str, str] = {}
+        self.entries: list[manifest.ArticleEntry] = []
+        self.image_size = 0
         self.account = export.author.get("wp:author_login", "")
         self.folder = out / self.account.replace("_", "-")
 
@@ -139,6 +143,7 @@ class _Converter:
             if stem is not None:
                 self._article(item, stem)
         self._channel(guids)
+        self._manifest()
         return self.plan
 
     def _check_renames(self, guids: list[str]) -> None:
@@ -226,6 +231,12 @@ class _Converter:
             self.plan.files[self.folder / f"{stem}-img" / name] = data
         self.plan.report.articles += 1
         self.plan.report.images += len(images)
+        self.image_size += sum(len(data) for data in images.values())
+        for name, data in images.items():
+            self.inputs[f"assets/{name}"] = manifest.sha256_bytes(data)
+        self.entries.append(
+            manifest.ArticleEntry(guid, stem, sha256(fields["content:encoded"]))
+        )
 
     def _image_resolver(self, guid: str, stem: str, images: dict[str, bytes]):  # type: ignore[no-untyped-def]
         def resolve(src: str) -> str:
@@ -254,6 +265,22 @@ class _Converter:
                 {"html": b.html, "markdown_sha256": b.markdown_sha256} for b in blocks
             ],
         }
+
+    def _manifest(self) -> None:
+        self.inputs[self.source.xml_name()] = manifest.sha256_bytes(
+            self.source.read_xml()
+        )
+        report = self.plan.report
+        document = manifest.build(
+            command="note-wxr-to-md",
+            allow_lossy=self.allow_lossy,
+            inputs=self.inputs,
+            articles=self.entries,
+            image_count=report.images,
+            total_size=self.image_size,
+            warnings=report.warnings,
+        )
+        self.plan.files[self.folder / manifest.MANIFEST_NAME] = _json(document)
 
     def _channel(self, guids: list[str]) -> None:
         self.plan.files[self.folder / ".note-channel.json"] = _json(
