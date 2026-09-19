@@ -176,6 +176,7 @@ docs/dev-charter/   # 開発憲章（git subtree で取り込み）
 
 - 実際の note 記事・画像・WXR・マニフェスト・公開 URL は置かない（原稿の正本は個人 vault `y-marui/obsidian-vault` の `posts/`）
 - テストのフィクスチャは合成データだけを使う
+- 実データでの往復確認は、環境変数 `NOTE_WXR_REALDATA_ZIP` に実エクスポートの ZIP を指定するローカル専用テスト（`make test-realdata`）だけで行う。CI では実行せず、実データの内容を出力・コピー・コミットしない
 - 出力先の規則（`posts/README.md` の原稿本文・プロパティ・画像命名）は vault 側が定義し、本ツールは検証機能として実装する
 - 経緯: [obsidian-vault#7](https://github.com/y-marui/obsidian-vault/issues/7)
 
