@@ -22,6 +22,13 @@ src/note_wxr_tools/
 
 ```
 src/note_wxr_tools/
-  __init__.py
-    - (未記入)
+  wxr.py
+    - imports: (標準ライブラリのみ)
+    - used by: to_md
+  htmlmd.py
+    - imports: (標準ライブラリのみ)
+    - used by: to_md
+  to_md.py
+    - imports: wxr, htmlmd
+    - used by: CLI エントリポイント `note-wxr-to-md`
 ```

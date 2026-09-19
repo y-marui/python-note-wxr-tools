@@ -21,6 +21,22 @@ make install
 
 ## Usage
 
+### note-wxr-to-md
+
+note のエクスポート（ZIP または展開済みディレクトリ）を Markdown 原稿に変換する。
+
+```sh
+uv run note-wxr-to-md <export.zip|dir> --out <dir>
+```
+
+- `--out` 配下の `<アカウント>/` に、記事 `.md`、サイドカー `.note.json`、画像 `<タイトル>-img/`、`.note-channel.json` を出力する。
+- 既存ファイルは `--force` を付けない限り上書きしない。
+- タイトルが空・重複する記事は `--rename "<guid>=<新タイトル>"` で解決する。
+- 情報が失われる変換は失敗する。警告に下げるには `--allow-lossy` を付ける。
+- 仕様は [docs/specification.md](docs/specification.md) を参照。
+
+### Development commands
+
 ```sh
 make all    # lint + type + test
 ```
