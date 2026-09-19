@@ -57,6 +57,8 @@ uv run note-md-to-wxr <article.md>... --out <dir>
 - Runs the validator first and writes nothing if it fails.
 - Unedited blocks reuse their original HTML; only edited blocks are regenerated from Markdown.
 - Writes `note-<account>-1.zip` and `manifest.json` into `--out`. Existing files are not overwritten without `--force`.
+- `--image-map <map.json>` replaces `/assets/` references with public HTTPS URLs (`{"<file>": "https://..."}`). Any unmapped image is an error, and the output is not byte-identical to the export.
+- `--allow-lossy` downgrades a missing image file, an unresolved image URL and a duplicate guid to warnings (recorded in the manifest).
 
 ### Development commands
 

@@ -86,6 +86,15 @@ folder and writes, into `<dir>`:
 - `manifest.json` describing that output (`command` is `note-md-to-wxr`).
   `articles[].body_sha256` is the hash of the rebuilt `content:encoded`.
 
+`--image-map <map.json>` replaces the `/assets/<file>` references of the
+rebuilt bodies with public HTTPS URLs, for re-importing into note. The map is
+a JSON object of `{"<file>": "https://..."}` (a `/assets/` prefix on the key
+is accepted). Every image referenced must be mapped and every URL must be
+`https://`, otherwise nothing is written. No images are packed into the ZIP,
+and the manifest records `image_map.replaced` (the number of references
+replaced) and the map file's hash. Output made with this option is outside
+the byte-exact guarantee. Local files are never published automatically.
+
 It runs the validator on the whole account folder first and refuses to write
 on any error. `<item>` elements follow the `guids` order of
 `.note-channel.json`, and only the given articles are included; a guid missing
@@ -191,6 +200,12 @@ Data shared by all articles of an account:
 | Unresolved image URL | failure | warning |
 | `guid` collision | failure | warning |
 | Unknown HTML element | warning (kept as raw HTML) | warning |
+
+Both `note-wxr-to-md` and `note-md-to-wxr` accept `--allow-lossy`. In
+`note-md-to-wxr` it downgrades a missing image file, an unresolved image
+URL and a duplicate `platform_post_id` (a `guid` collision) to warnings; a
+missing image is then left out of the ZIP. The validator applies the same
+downgrade to a folder whose manifest records `allow_lossy`.
 
 With `--allow-lossy`, downgraded failures are recorded in the manifest.
 Anything not expressible in Markdown stays as raw HTML so the body is not

@@ -57,6 +57,8 @@ uv run note-md-to-wxr <article.md>... --out <dir>
 - 先に validator を実行し、失敗したら何も書かない。
 - 編集していないブロックは元の HTML を再利用し、編集したブロックだけ Markdown から再生成する。
 - `--out` に `note-<アカウント>-1.zip` と `manifest.json` を出力する。既存ファイルは `--force` なしでは上書きしない。
+- `--image-map <map.json>` で `/assets/` の参照を公開 HTTPS URL に置き換える（`{"<ファイル名>": "https://..."}`）。未マップの画像があればエラー。この出力は元のエクスポートと byte 一致しない。
+- `--allow-lossy` で、画像ファイル欠落・解決できない画像 URL・guid 重複を警告に下げる（manifest に記録）。
 
 ### Development commands
 

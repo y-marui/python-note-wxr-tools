@@ -161,26 +161,25 @@ def _check_manifest(folder: Path, articles: list[_Article], result: Result) -> N
     data = _load_json(folder / manifest.MANIFEST_NAME, result)
     if not isinstance(data, dict):
         return
-    listed = {
-        a["guid"]: a
-        for a in data.get("articles", [])
-        if isinstance(a, dict) and "guid" in a
-    }
-    disk = {a.guid: a for a in articles}
-    for guid in sorted(listed.keys() - disk.keys()):
-        result.errors.append(f"manifest: article {guid} not found on disk")
-    for guid in sorted(disk.keys() - listed.keys()):
-        result.errors.append(f"manifest: article {guid} is not listed")
-    for guid in sorted(listed.keys() & disk.keys()):
-        entry, article = listed[guid], disk[guid]
-        if entry.get("title") != article.title:
-            result.errors.append(f"manifest: title of {guid} differs from filename")
+    entries = [a for a in data.get("articles", []) if isinstance(a, dict)]
+    listed = {str(a.get("title")): a for a in entries}
+    disk = {a.title: a for a in articles}
+    for title in sorted(listed.keys() - disk.keys()):
+        result.errors.append(f"manifest: article {title} not found on disk")
+    for title in sorted(disk.keys() - listed.keys()):
+        result.errors.append(f"manifest: article {title} is not listed")
+    for title in sorted(listed.keys() & disk.keys()):
+        entry, article = listed[title], disk[title]
+        if entry.get("guid") != article.guid:
+            result.errors.append(
+                f"manifest: guid of {title} differs from the manuscript"
+            )
         if entry.get("body_sha256") != article.body_sha256:
-            result.errors.append(f"manifest: body hash of {guid} differs from sidecar")
-    if data.get("article_count") != len(listed):
+            result.errors.append(f"manifest: body hash of {title} differs from sidecar")
+    if data.get("article_count") != len(entries):
         result.errors.append("manifest: article_count does not match articles")
-    hashes = {g: str(a.get("body_sha256")) for g, a in listed.items()}
-    if data.get("body_sha256") != manifest.overall_body_hash(hashes):
+    pairs = [(str(a.get("guid")), str(a.get("body_sha256"))) for a in entries]
+    if data.get("body_sha256") != manifest.overall_body_hash(pairs):
         result.errors.append("manifest: overall body_sha256 does not match articles")
     _check_image_totals(folder, data, result)
 
@@ -199,14 +198,20 @@ def _check_image_totals(folder: Path, data: dict[str, object], result: Result) -
         result.warnings.append("manifest: total_size is stale")
 
 
-def validate(folder: Path) -> Result:
-    """Validate an account folder written by ``note-wxr-to-md``."""
+def validate(folder: Path, *, allow_lossy: bool = False) -> Result:
+    """Validate an account folder written by ``note-wxr-to-md``.
+
+    With ``allow_lossy`` (or when the manifest records it) image problems and
+    guid collisions are warnings instead of errors.
+    """
     result = Result()
     if not folder.is_dir():
         result.errors.append(f"not a directory: {folder}")
         return result
     manifest_data = _load_json_quiet(folder / manifest.MANIFEST_NAME)
-    allow_lossy = bool(manifest_data and manifest_data.get("allow_lossy") is True)
+    allow_lossy = allow_lossy or bool(
+        manifest_data and manifest_data.get("allow_lossy") is True
+    )
     paths = sorted(folder.glob("*.md"))
     if not paths:
         result.errors.append("no manuscripts (*.md) found")
@@ -216,7 +221,7 @@ def validate(folder: Path) -> Result:
     seen: dict[str, str] = {}
     for article in articles:
         if article.guid in seen:
-            result.errors.append(
+            (result.warnings if allow_lossy else result.errors).append(
                 f"duplicate platform_post_id {article.guid}: "
                 f"{seen[article.guid]} and {article.title}"
             )

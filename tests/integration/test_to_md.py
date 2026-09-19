@@ -171,6 +171,12 @@ def test_convert_guid_collision_is_lossy(
         convert(export, tmp_path / "bad")
     assert convert(export, tmp_path / "ok", allow_lossy=True).articles == 2
 
+    from note_wxr_tools.validate import validate
+
+    result = validate(_folder(tmp_path / "ok"))
+    assert result.errors == []
+    assert any("duplicate platform_post_id" in w for w in result.warnings)
+
 
 def test_convert_reads_extracted_directory(
     make_export: MakeExport, tmp_path: Path

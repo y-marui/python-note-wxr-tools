@@ -37,6 +37,18 @@ class Report:
     images: int = 0
     regenerated_blocks: int = 0
     warnings: list[str] = field(default_factory=list)
+    replaced_images: int = 0
+
+
+@dataclass
+class _Options:
+    """Settings shared by all articles of one run."""
+
+    folder: Path
+    allow_lossy: bool = False
+    image_map: dict[str, str] | None = None
+    warnings: list[str] = field(default_factory=list)
+    replaced: int = 0
 
 
 @dataclass
@@ -105,18 +117,53 @@ def _image_src(stem: str) -> ImageSrc:
     return to_src
 
 
-def _collect_images(folder: Path, stem: str, content: str) -> dict[str, bytes]:
+def _collect_images(options: _Options, stem: str, content: str) -> dict[str, bytes]:
     images: dict[str, bytes] = {}
     for match in ASSET_SRC.finditer(content):
         name = html.unescape(match[1])[len(ASSETS_PREFIX) :]
-        path = folder / f"{stem}-img" / name
-        if not path.is_file():
+        path = options.folder / f"{stem}-img" / name
+        if path.is_file():
+            images[name] = path.read_bytes()
+        elif not options.allow_lossy:
             raise ConversionError(f"{stem}.md: missing image file {stem}-img/{name}")
-        images[name] = path.read_bytes()
+        else:
+            options.warnings.append(f"{stem}.md: missing image attachment {name}")
     return images
 
 
-def _article(folder: Path, path: Path) -> _Article:
+def _load_image_map(path: Path) -> dict[str, str]:
+    """Read ``{"<file>": "https://..."}``; keys may carry ``/assets/``."""
+    mapping = {}
+    for key, url in _read_json(path).items():
+        if not isinstance(url, str) or not url.startswith("https://"):
+            raise ConversionError(f"{path.name}: {key}: not an HTTPS URL")
+        mapping[key.lstrip("/").removeprefix("assets/")] = url
+    return mapping
+
+
+def _apply_image_map(options: _Options, stem: str, content: str) -> str:
+    """Replace ``/assets/<file>`` with public URLs; every image must be mapped."""
+    mapping = options.image_map
+    assert mapping is not None
+    unmapped = []
+
+    def replace(match: re.Match[str]) -> str:
+        name = html.unescape(match[1])[len(ASSETS_PREFIX) :]
+        url = mapping.get(name)
+        if url is None:
+            unmapped.append(name)
+            return match[0]
+        options.replaced += 1
+        return f' src="{html.escape(url, quote=True)}"'
+
+    replaced = ASSET_SRC.sub(replace, content)
+    if unmapped:
+        raise ConversionError(f"{stem}.md: not in the image map: {', '.join(unmapped)}")
+    return replaced
+
+
+def _article(options: _Options, path: Path) -> _Article:
+    folder = options.folder
     props, body = parse(path.read_text(encoding="utf-8"))
     stem = path.stem
     sidecar = _read_json(folder / f"{stem}.note.json")
@@ -129,6 +176,8 @@ def _article(folder: Path, path: Path) -> _Article:
     fields["title"] = original if sanitize_filename(original) == stem else stem
     fields["link"] = props.get("publication_url") or item.get("link", "")
     fields["guid"] = props["platform_post_id"]
+    if options.image_map is not None:
+        content = _apply_image_map(options, stem, content)
     fields["content:encoded"] = content
     fields["wp:post_date"], fields["wp:post_date_gmt"] = _wxr_dates(
         props["platform_created_at"]
@@ -139,7 +188,9 @@ def _article(folder: Path, path: Path) -> _Article:
     fields["wp:status"] = (
         "draft" if props["publication_status"] == "draft" else "publish"
     )
-    images = _collect_images(folder, stem, content)
+    images = (
+        {} if options.image_map is not None else _collect_images(options, stem, content)
+    )
     inputs = {
         p.name: manifest.sha256_bytes(p.read_bytes())
         for p in (path, folder / f"{stem}.note.json")
@@ -178,49 +229,49 @@ def _write_zip(path: Path, xml_name: str, xml: str, assets: dict[str, bytes]) ->
             archive.writestr(entry(f"assets/{name}"), assets[name])
 
 
-def convert(articles: Sequence[Path], out: Path, *, force: bool = False) -> Report:
-    """Write ``note-<account>-1.zip`` and ``manifest.json`` into ``out``."""
-    folder = _check_inputs(articles)
-    checked = validate(folder)
-    if checked.errors:
-        raise ConversionError("\n".join(checked.errors))
-    channel_file = _read_json(folder / CHANNEL_NAME)
-    channel, author, guids = (
-        channel_file.get("channel"),
-        channel_file.get("author"),
-        channel_file.get("guids"),
-    )
+def _read_channel(folder: Path) -> tuple[dict[str, str], dict[str, str], list[str]]:
+    data = _read_json(folder / CHANNEL_NAME)
+    channel, author, guids = data.get("channel"), data.get("author"), data.get("guids")
     if not (
         isinstance(channel, dict)
         and isinstance(author, dict)
         and isinstance(guids, list)
     ):
         raise ConversionError(f"{CHANNEL_NAME}: unexpected structure")
-    built = [_article(folder, Path(p).resolve()) for p in articles]
-    unknown = [a.guid for a in built if a.guid not in guids]
-    if unknown:
-        raise ConversionError(f"not in {CHANNEL_NAME}: {', '.join(unknown)}")
-    built.sort(key=lambda a: guids.index(a.guid))
-    account = author.get("wp:author_login", "")
+    return channel, author, guids
+
+
+def _merge_assets(built: list[_Article]) -> dict[str, bytes]:
     assets: dict[str, bytes] = {}
     for article in built:
         for name, data in article.images.items():
             if assets.setdefault(name, data) != data:
                 raise ConversionError(f"image {name} differs between articles")
-    xml = render(channel, author, [a.fields for a in built])
-    zip_path = out / f"note-{account}-1.zip"
-    manifest_path = out / manifest.MANIFEST_NAME
-    existing = [str(p) for p in (zip_path, manifest_path) if p.exists()]
-    if existing and not force:
-        raise ConversionError(f"already exists (use --force): {', '.join(existing)}")
-    out.mkdir(parents=True, exist_ok=True)
-    _write_zip(zip_path, f"note-{account}-1.xml", xml, assets)
-    inputs = {CHANNEL_NAME: manifest.sha256_bytes((folder / CHANNEL_NAME).read_bytes())}
+    return assets
+
+
+def _manifest(
+    options: _Options,
+    built: list[_Article],
+    assets: dict[str, bytes],
+    image_map: Path | None,
+) -> dict[str, object]:
+    inputs = {
+        CHANNEL_NAME: manifest.sha256_bytes(
+            (options.folder / CHANNEL_NAME).read_bytes()
+        )
+    }
     for article in built:
         inputs.update(article.inputs)
-    document = manifest.build(
+    extra: dict[str, object] = {}
+    if image_map is not None:
+        inputs[f"image-map/{image_map.name}"] = manifest.sha256_bytes(
+            image_map.read_bytes()
+        )
+        extra["image_map"] = {"replaced": options.replaced}
+    return manifest.build(
         command="note-md-to-wxr",
-        allow_lossy=False,
+        allow_lossy=options.allow_lossy,
         inputs=inputs,
         articles=[
             manifest.ArticleEntry(a.guid, a.stem, sha256(a.fields["content:encoded"]))
@@ -228,8 +279,52 @@ def convert(articles: Sequence[Path], out: Path, *, force: bool = False) -> Repo
         ],
         image_count=len(assets),
         total_size=sum(len(d) for d in assets.values()),
-        warnings=checked.warnings,
+        warnings=options.warnings,
+        extra=extra,
     )
+
+
+def convert(
+    articles: Sequence[Path],
+    out: Path,
+    *,
+    force: bool = False,
+    allow_lossy: bool = False,
+    image_map: Path | None = None,
+) -> Report:
+    """Write ``note-<account>-1.zip`` and ``manifest.json`` into ``out``.
+
+    With ``image_map``, ``/assets/<file>`` references become the mapped public
+    URLs and no images are packed; such output is not byte-identical to the
+    original export.
+    """
+    folder = _check_inputs(articles)
+    checked = validate(folder, allow_lossy=allow_lossy)
+    if checked.errors:
+        raise ConversionError("\n".join(checked.errors))
+    channel, author, guids = _read_channel(folder)
+    options = _Options(
+        folder,
+        allow_lossy,
+        _load_image_map(image_map) if image_map else None,
+        list(checked.warnings),
+    )
+    built = [_article(options, Path(p).resolve()) for p in articles]
+    unknown = [a.guid for a in built if a.guid not in guids]
+    if unknown:
+        raise ConversionError(f"not in {CHANNEL_NAME}: {', '.join(unknown)}")
+    built.sort(key=lambda a: guids.index(a.guid))
+    assets = _merge_assets(built)
+    account = author.get("wp:author_login", "")
+    zip_path = out / f"note-{account}-1.zip"
+    manifest_path = out / manifest.MANIFEST_NAME
+    existing = [str(p) for p in (zip_path, manifest_path) if p.exists()]
+    if existing and not force:
+        raise ConversionError(f"already exists (use --force): {', '.join(existing)}")
+    out.mkdir(parents=True, exist_ok=True)
+    xml = render(channel, author, [a.fields for a in built])
+    _write_zip(zip_path, f"note-{account}-1.xml", xml, assets)
+    document = _manifest(options, built, assets, image_map)
     manifest_path.write_text(
         json.dumps(document, ensure_ascii=False, indent=2) + "\n", "utf-8"
     )
@@ -238,7 +333,8 @@ def convert(articles: Sequence[Path], out: Path, *, force: bool = False) -> Repo
         len(built),
         len(assets),
         sum(a.regenerated for a in built),
-        checked.warnings,
+        options.warnings,
+        options.replaced,
     )
 
 
@@ -250,9 +346,27 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser.add_argument("articles", nargs="+", type=Path, help="article .md files")
     parser.add_argument("--out", type=Path, required=True, help="output directory")
     parser.add_argument("--force", action="store_true", help="overwrite existing files")
+    parser.add_argument(
+        "--allow-lossy",
+        action="store_true",
+        help="downgrade lossy failures to warnings",
+    )
+    parser.add_argument(
+        "--image-map",
+        type=Path,
+        metavar="MAP.json",
+        help='JSON {"<file>": "https://..."}; replaces /assets/ references '
+        "(output is not byte-identical to the export)",
+    )
     args = parser.parse_args(argv)
     try:
-        report = convert(args.articles, args.out, force=args.force)
+        report = convert(
+            args.articles,
+            args.out,
+            force=args.force,
+            allow_lossy=args.allow_lossy,
+            image_map=args.image_map,
+        )
     except (ConversionError, OSError) as error:
         print(f"error: {error}", file=sys.stderr)
         return 1
@@ -260,7 +374,8 @@ def main(argv: Sequence[str] | None = None) -> int:
         print(f"warning: {warning}", file=sys.stderr)
     print(
         f"wrote {report.zip_path} ({report.articles} article(s), "
-        f"{report.images} image(s), {report.regenerated_blocks} regenerated block(s))"
+        f"{report.images} image(s), {report.regenerated_blocks} regenerated block(s), "
+        f"{report.replaced_images} image URL(s) replaced)"
     )
     return 0
 
