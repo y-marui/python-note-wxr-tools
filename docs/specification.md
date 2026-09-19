@@ -35,6 +35,29 @@ Common rules:
 - `note-md-to-wxr` runs the validator first and refuses to write on failure.
 - Every command writes a `manifest.json` next to its output (see Manifest).
 
+## Difference report `--against`
+
+`note-wxr-to-md <export> --against <posts dir>` is a report-only mode for
+migrating manuscripts that were imported by hand. It cannot be combined with
+`--out` and writes nothing; the posts directory is only ever read, so
+hand-written properties such as `editorial_note` are safe.
+
+- Manuscripts under the posts directory (searched recursively) are matched to
+  export articles by `platform_post_id`. Files without front matter or
+  without that property are ignored; a duplicate id is a warning.
+- For each matched article it lists property differences (a generated
+  property that is missing or has another value; extra properties in the posts
+  file are ignored) and a unified diff of the body. Block `name` and `id`
+  attributes in HTML are ignored, since hand imports dropped them. A long diff
+  is cut after 40 lines.
+- It also lists articles that are new in the export and manuscripts that are
+  only in the posts directory, limited to those without an `account` or with
+  the export's account (`_` and `-` are treated alike).
+- Articles with an empty or duplicate title are named `untitled-<guid>` so the
+  report can still be produced. Other problems, such as a missing image, still
+  fail unless `--allow-lossy` is given.
+- The exit code is 0 whether or not differences are found; it is a report.
+
 ## Property mapping
 
 Each article's front matter is derived from the WXR `<item>`:

@@ -33,6 +33,7 @@ uv run note-wxr-to-md <export.zip|dir> --out <dir>
 - Existing files are never overwritten unless `--force` is given.
 - Resolve empty or duplicate titles with `--rename "<guid>=<new title>"`.
 - Lossy conversions fail; `--allow-lossy` downgrades them to warnings.
+- `--against <posts dir>` only reports differences and writes nothing (not combinable with `--out`). It matches manuscripts you imported by hand by `platform_post_id` and lists property and body differences; the posts directory is never written.
 - See [docs/specification.md](docs/specification.md) for the specification.
 
 ### note-wxr-validate
