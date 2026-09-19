@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import hashlib
+from collections.abc import Iterable
 from dataclasses import dataclass
 from importlib import metadata
 
@@ -29,9 +30,9 @@ def sha256_bytes(data: bytes) -> str:
     return hashlib.sha256(data).hexdigest()
 
 
-def overall_body_hash(articles: dict[str, str]) -> str:
-    """Hash of the per-article body hashes, ordered by guid."""
-    joined = "\n".join(articles[guid] for guid in sorted(articles))
+def overall_body_hash(articles: Iterable[tuple[str, str]]) -> str:
+    """Hash of the per-article body hashes, ordered by ``(guid, hash)``."""
+    joined = "\n".join(body_hash for _, body_hash in sorted(articles))
     return sha256_bytes(joined.encode("utf-8"))
 
 
@@ -44,9 +45,10 @@ def build(
     image_count: int,
     total_size: int,
     warnings: list[str],
+    extra: dict[str, object] | None = None,
 ) -> dict[str, object]:
     """Return the manifest; ``total_size`` is the size of all image files."""
-    return {
+    document: dict[str, object] = {
         "manifest_version": MANIFEST_VERSION,
         "tool": {"name": PACKAGE, "version": tool_version()},
         "command": command,
@@ -55,10 +57,11 @@ def build(
         "article_count": len(articles),
         "image_count": image_count,
         "total_size": total_size,
-        "body_sha256": overall_body_hash({a.guid: a.body_sha256 for a in articles}),
+        "body_sha256": overall_body_hash((a.guid, a.body_sha256) for a in articles),
         "articles": [
             {"guid": a.guid, "title": a.title, "body_sha256": a.body_sha256}
             for a in articles
         ],
         "warnings": warnings,
     }
+    return document | (extra or {})

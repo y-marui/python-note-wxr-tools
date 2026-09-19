@@ -207,3 +207,85 @@ def test_main_exit_codes(
     assert "wrote" in capsys.readouterr().out
     assert main(args) == 1
     assert "already exists" in capsys.readouterr().err
+
+
+def _write_map(path: Path, mapping: dict[str, str]) -> Path:
+    path.write_text(json.dumps(mapping), "utf-8")
+    return path
+
+
+def test_convert_image_map_replaces_references_and_records_the_count(
+    workspace: tuple[Path, str], tmp_path: Path
+) -> None:
+    folder, _ = workspace
+    md = folder / "One.md"
+    md.write_text(
+        md.read_text("utf-8").replace("Last", "Last ![](One-img/a.png)"), "utf-8"
+    )
+    mapping = _write_map(
+        tmp_path / "map.json", {"/assets/a.png": "https://cdn.example/a.png?x=1&y=2"}
+    )
+
+    report = to_wxr([md], tmp_path / "wxr", image_map=mapping)
+
+    xml = _xml(report.zip_path)
+    assert "/assets/" not in xml
+    assert xml.count('src="https://cdn.example/a.png?x=1&amp;y=2"') == 2
+    assert (report.images, report.replaced_images) == (0, 2)
+    with zipfile.ZipFile(report.zip_path) as archive:
+        assert archive.namelist() == ["note-acct_x-1.xml"]
+    data = json.loads((tmp_path / "wxr" / "manifest.json").read_text("utf-8"))
+    assert data["image_map"] == {"replaced": 2}
+    assert "image-map/map.json" in {i["path"] for i in data["inputs"]}
+
+
+def test_convert_image_map_accepts_bare_file_names(
+    workspace: tuple[Path, str], tmp_path: Path
+) -> None:
+    folder, _ = workspace
+    mapping = _write_map(tmp_path / "map.json", {"a.png": "https://cdn.example/a.png"})
+    report = to_wxr([folder / "One.md"], tmp_path / "wxr", image_map=mapping)
+    assert report.replaced_images == 1
+
+
+def test_convert_image_map_rejects_unmapped_images_and_non_https_urls(
+    workspace: tuple[Path, str], tmp_path: Path
+) -> None:
+    folder, _ = workspace
+    empty = _write_map(tmp_path / "empty.json", {})
+    with pytest.raises(ConversionError, match="not in the image map: a.png"):
+        to_wxr([folder / "One.md"], tmp_path / "wxr", image_map=empty)
+    assert not (tmp_path / "wxr").exists()
+
+    insecure = _write_map(tmp_path / "http.json", {"a.png": "http://cdn.example/a.png"})
+    with pytest.raises(ConversionError, match="not an HTTPS URL"):
+        to_wxr([folder / "One.md"], tmp_path / "wxr", image_map=insecure)
+
+
+def test_convert_allow_lossy_downgrades_missing_images_and_records_it(
+    workspace: tuple[Path, str], tmp_path: Path
+) -> None:
+    folder, _ = workspace
+    (folder / "One-img" / "a.png").unlink()
+    with pytest.raises(ConversionError, match="missing image file"):
+        to_wxr([folder / "One.md"], tmp_path / "strict")
+
+    report = to_wxr([folder / "One.md"], tmp_path / "lossy", allow_lossy=True)
+
+    assert report.images == 0
+    assert any("missing image file" in w for w in report.warnings)
+    data = json.loads((tmp_path / "lossy" / "manifest.json").read_text("utf-8"))
+    assert data["allow_lossy"] is True
+    assert data["warnings"] == report.warnings
+
+
+def test_main_supports_allow_lossy_and_image_map(
+    workspace: tuple[Path, str],
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    folder, _ = workspace
+    mapping = _write_map(tmp_path / "map.json", {"a.png": "https://cdn.example/a.png"})
+    args = [str(folder / "One.md"), "--out", str(tmp_path / "wxr")]
+    assert main([*args, "--image-map", str(mapping), "--allow-lossy"]) == 0
+    assert "1 image URL(s) replaced" in capsys.readouterr().out

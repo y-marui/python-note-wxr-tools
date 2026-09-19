@@ -101,8 +101,8 @@ def test_validate_reports_manifest_drift(folder: Path) -> None:
 
     _edit_json(folder / MANIFEST_NAME, change)
     errors = "\n".join(validate(folder).errors)
-    assert "body hash of n1 differs from sidecar" in errors
-    assert "article gone not found on disk" in errors
+    assert "body hash of Title differs from sidecar" in errors
+    assert "article G not found on disk" in errors
     assert "overall body_sha256" in errors
 
 
@@ -150,3 +150,20 @@ def test_main_exit_codes(folder: Path, capsys: pytest.CaptureFixture[str]) -> No
     (folder / MANIFEST_NAME).unlink()
     assert main([str(folder)]) == 1
     assert "error: manifest.json" in capsys.readouterr().err
+
+
+def test_validate_downgrades_duplicate_guid_when_lossy_is_allowed(folder: Path) -> None:
+    text = (folder / "Title.md").read_text("utf-8")
+    (folder / "Copy.md").write_text(text.replace('"Title"', '"Copy"', 1), "utf-8")
+    (folder / "Copy.note.json").write_text(
+        (folder / "Title.note.json").read_text("utf-8"), "utf-8"
+    )
+    (folder / "Copy-img").mkdir()
+    (folder / "Copy-img" / "a.png").write_bytes(b"PNG")
+    md = folder / "Copy.md"
+    md.write_text(md.read_text("utf-8").replace("Title-img/", "Copy-img/"), "utf-8")
+
+    assert "duplicate platform_post_id" in "\n".join(validate(folder).errors)
+    result = validate(folder, allow_lossy=True)
+    assert not any("duplicate" in e for e in result.errors)
+    assert any("duplicate platform_post_id n1" in w for w in result.warnings)
