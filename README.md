@@ -21,6 +21,22 @@ make install
 
 ## Usage
 
+### note-wxr-to-md
+
+Convert a note export (ZIP or extracted directory) into Markdown manuscripts.
+
+```sh
+uv run note-wxr-to-md <export.zip|dir> --out <dir>
+```
+
+- Writes articles (`.md`), sidecars (`.note.json`), images (`<title>-img/`) and `.note-channel.json` under `<account>/` in `--out`.
+- Existing files are never overwritten unless `--force` is given.
+- Resolve empty or duplicate titles with `--rename "<guid>=<new title>"`.
+- Lossy conversions fail; `--allow-lossy` downgrades them to warnings.
+- See [docs/specification.md](docs/specification.md) for the specification.
+
+### Development commands
+
 ```sh
 make all    # lint + type + test
 ```

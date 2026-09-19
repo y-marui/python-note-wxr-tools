@@ -6,6 +6,9 @@ authors = [{ name = "Yukihiro Marui" }]
 requires-python = ">=3.11"
 dependencies = []
 
+[project.scripts]
+note-wxr-to-md = "note_wxr_tools.to_md:main"
+
 [dependency-groups]
 dev = [
     "pytest>=8",

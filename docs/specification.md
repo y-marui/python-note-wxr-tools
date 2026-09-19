@@ -41,15 +41,19 @@ Each article's front matter is derived from the WXR `<item>`:
 
 | Front matter property | WXR source | Notes |
 |---|---|---|
-| `title` | `title` | Must match the filename (see Filenames) |
+| `title` | `title` | Equals the filename stem (see Filenames) |
 | `account` | `wp:author_login` | |
 | `platform_post_id` | `guid` | Unique per article |
-| `publication_url` | `link` | |
+| `publication_url` | `link` | Omitted for drafts |
 | `platform_created_at` | `wp:post_date` | ISO 8601 with `+09:00` |
 | `platform_updated_at` | `wp:post_modified` | ISO 8601 with `+09:00` |
-| `publication_status` | `wp:status` | `publish` or `draft`; any other value fails |
+| `publication_status` | `wp:status` | `publish` becomes `published`, `draft` stays `draft`; any other value fails |
 | `platform` | fixed | `note` |
 | `origin` | fixed | `note.com export` |
+
+`account` is the `wp:author_login` of the channel's single `wp:author`
+(an export with several authors fails). An export ZIP or directory must
+contain exactly one XML file.
 
 The remaining item fields live in the sidecar.
 
@@ -78,13 +82,20 @@ Stored next to each article. It holds everything the Markdown cannot:
 - **Blocks**: for each top-level HTML block of `content:encoded`, in order,
   the original HTML (including attributes such as `name`) and the hash of
   the Markdown generated from it.
-- **Item fields**: `wp:post_id`, `post_name`, `post_type`, `post_parent`,
+- **Item fields**: the original `title` and `link` (the front matter holds
+  the filename-safe title and omits the URL for drafts), `wp:post_id`, `post_name`, `post_type`, `post_parent`,
   `menu_order`, `is_sticky`, `comment_status`, `ping_status`,
   `post_password`, `excerpt:encoded`, `description`, `dc:creator`,
-  `pubDate`, `post_date_gmt`.
+  `pubDate`, `wp:post_date_gmt`, `wp:post_modified_gmt`.
 - **Body hash**: hash of the whole original `content:encoded`.
 
 Hashes are SHA-256, hex encoded, over UTF-8 bytes.
+
+The file is JSON: `{"item": {<tag>: <text>}, "body_sha256": ..., "blocks":
+[{"html": ..., "markdown_sha256": ...}]}`. Item keys are the WXR tag names
+(`wp:post_id`, `excerpt:encoded`, ...). Whitespace between top-level blocks
+belongs to the following block's `html`, so the `html` values concatenate to
+the original body.
 
 ### Regeneration rule
 
@@ -97,13 +108,25 @@ sidecar:
 If no block was edited, the reassembled body equals the original
 `content:encoded` (checked against the body hash).
 
+## Markdown body
+
+The body is the blocks' Markdown joined by one blank line; a block never
+contains a blank line, so `note-md-to-wxr` can split the body back into
+blocks. Only these elements become Markdown: `h1`-`h6`, `p`, `ul`/`ol`
+(nested), `blockquote` of paragraphs, `hr`, `pre`, `img` and a `figure` that
+holds only an image with an empty caption, plus inline `strong`/`b`,
+`em`/`i`, `code`, `a` and `br`. Any other block, or an empty one, is kept as
+raw HTML (blank lines inside it are removed) and reported as a warning.
+Attributes such as `name` are not kept in Markdown; the sidecar keeps them.
+
 ## Account-level `.note-channel.json`
 
 Data shared by all articles of an account:
 
-- Channel `title`, `description`, `language` and `pubDate`.
-- The `wp:author` block.
-- Article order: a list of `guid`, used to order `<item>` elements.
+- Channel fields (`title`, `link`, `description`, `pubDate`, `language`,
+  `wp:wxr_version`, ...), keyed by WXR tag name under `channel`.
+- The `wp:author` block, under `author`.
+- Article order: `guids`, a list of `guid`, used to order `<item>` elements.
 
 `note-md-to-wxr` fails if this file is missing.
 
