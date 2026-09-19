@@ -8,6 +8,7 @@ dependencies = []
 
 [project.scripts]
 note-wxr-to-md = "note_wxr_tools.to_md:main"
+note-md-to-wxr = "note_wxr_tools.to_wxr:main"
 note-wxr-validate = "note_wxr_tools.validate:main"
 
 [dependency-groups]

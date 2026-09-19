@@ -22,6 +22,7 @@ ITEM = """<item><title><![CDATA[{title}]]></title><link>https://note.com/acct_x/
 WXR = """<?xml version="1.0" encoding="UTF-8"?><rss version="2.0" \
 xmlns:excerpt="http://wordpress.org/export/1.2/excerpt/" \
 xmlns:content="http://purl.org/rss/1.0/modules/content/" \
+xmlns:wfw="http://wellformedweb.org/CommentAPI/" \
 xmlns:dc="http://purl.org/dc/elements/1.1/" \
 xmlns:wp="http://wordpress.org/export/1.2/"><channel><title>Synthetic</title>\
 <link>https://note.com/acct_x</link><description>desc</description>\
