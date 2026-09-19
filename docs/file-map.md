@@ -28,7 +28,16 @@ src/note_wxr_tools/
   htmlmd.py
     - imports: (標準ライブラリのみ)
     - used by: to_md
+  manifest.py
+    - imports: (標準ライブラリのみ)
+    - used by: to_md, validate
+  frontmatter.py
+    - imports: (標準ライブラリのみ)
+    - used by: validate
   to_md.py
-    - imports: wxr, htmlmd
+    - imports: wxr, htmlmd, manifest
     - used by: CLI エントリポイント `note-wxr-to-md`
+  validate.py
+    - imports: manifest, frontmatter, htmlmd
+    - used by: CLI エントリポイント `note-wxr-validate`
 ```

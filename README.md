@@ -35,6 +35,17 @@ uv run note-wxr-to-md <export.zip|dir> --out <dir>
 - Lossy conversions fail; `--allow-lossy` downgrades them to warnings.
 - See [docs/specification.md](docs/specification.md) for the specification.
 
+### note-wxr-validate
+
+Check a converted account folder against the specification. Exits 1 on any error.
+
+```sh
+uv run note-wxr-validate <dir>
+```
+
+- Checks required properties, image references, sidecar hashes and that `manifest.json` matches the files on disk.
+- `note-wxr-to-md` writes `manifest.json` into the same folder.
+
 ### Development commands
 
 ```sh

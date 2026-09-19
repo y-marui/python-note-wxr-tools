@@ -155,28 +155,48 @@ lost.
 
 ## Manifest `manifest.json`
 
-Written next to every tool output. Schema is finalised with the validator
-(#4); it contains:
+Written next to every tool output (`note-wxr-to-md` writes it into the
+account folder). JSON with these keys:
 
-- Target articles (`guid`, `title`).
-- Article count, image count and total size.
-- Per-article body hashes and an overall body hash.
-- Warnings.
-- Whether `--allow-lossy` was used.
-- Tool version.
-- Hashes of the input files.
+| Key | Content |
+|---|---|
+| `manifest_version` | `1` |
+| `tool` | `name` and `version` of this package |
+| `command` | The command that wrote it |
+| `allow_lossy` | Whether `--allow-lossy` was used (downgraded failures are in `warnings`) |
+| `inputs` | `path` and `sha256` of each input file: the export XML and every copied `assets/<file>` |
+| `article_count`, `image_count` | Counts of articles and image files written |
+| `total_size` | Total bytes of the image files written |
+| `articles` | Per article: `guid`, `title` (filename stem) and `body_sha256` (hash of the original `content:encoded`) |
+| `body_sha256` | Overall body hash: SHA-256 of the per-article body hashes, ordered by `guid` and joined by newlines |
+| `warnings` | Warnings raised by the run |
 
 `note-wxr-validate` checks that the manifest matches the files on disk.
+Manuscripts may be edited after conversion, so the manifest describes the
+original bodies (the sidecar hashes), not the Markdown text.
 
 ## Validation
 
-`note-wxr-validate <dir>` checks:
+`note-wxr-validate <dir>` takes the account folder and reports every problem
+at once. It exits 1 if there is any error. It checks:
 
-- Required properties are present and consistent (`title` matches the
-  filename, valid `publication_status`, `platform_post_id`, ...).
-- `<title>-img/` exists and every `<img>` resolves.
-- Sidecar hashes match.
-- The manifest matches the files on disk.
+- Required properties are present and consistent: `title` (equal to the
+  filename stem), `account`, `platform_post_id`, `platform_created_at` and
+  `platform_updated_at` (ISO 8601 with an offset), `publication_status` (one
+  of `draft`, `published`, `needs_update`), `platform` (`note`) and `origin`.
+  A `published` article also needs `publication_url`. `platform_post_id` is
+  unique.
+- Every image reference (Markdown and `<img>`) points to an existing file
+  under `<title>-img/`. A remote URL, a path elsewhere or a missing file is an
+  error, or a warning when the manifest says `allow_lossy`.
+- The sidecar exists, has the expected structure, and its block HTML
+  concatenates to its `body_sha256`. Block Markdown hashes are not compared:
+  they differ from the manuscript once a block is edited, which is what the
+  regeneration rule relies on.
+- The manifest exists and matches the disk: the same articles (`guid`,
+  `title`), the per-article and overall body hashes and `article_count` are
+  errors. A stale `image_count` or `total_size` is only a warning, since
+  images may be added to a manuscript later.
 
 ## Dependencies
 

@@ -71,14 +71,18 @@ class Source:
             names = [p.name for p in self._dir.iterdir() if p.is_file()]
         return sorted(n for n in names if n.endswith(".xml"))
 
-    def read_xml(self) -> bytes:
+    def xml_name(self) -> str:
         names = self._root_xml_names()
         if len(names) != 1:
             raise ExportError(f"expected exactly one XML file, found {len(names)}")
+        return names[0]
+
+    def read_xml(self) -> bytes:
+        name = self.xml_name()
         if self._zip is not None:
-            return self._zip.read(names[0])
+            return self._zip.read(name)
         assert self._dir is not None
-        return (self._dir / names[0]).read_bytes()
+        return (self._dir / name).read_bytes()
 
     def read_asset(self, name: str) -> bytes | None:
         """Return the bytes of ``assets/<name>`` or None if it is absent."""
