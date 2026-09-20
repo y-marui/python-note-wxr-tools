@@ -1,0 +1,93 @@
+"""Apply generated manuscripts to an existing posts directory (``--into``).
+
+Nothing is ever deleted. Only new articles are written, and differing ones are
+overwritten only on request, keeping properties the export does not know.
+"""
+
+from __future__ import annotations
+
+from dataclasses import dataclass, field
+from pathlib import Path
+
+from note_wxr_tools import against
+
+
+@dataclass
+class IntoSummary:
+    """What ``--into`` did with each article."""
+
+    created: list[str] = field(default_factory=list)
+    overwritten: list[str] = field(default_factory=list)
+    unchanged: int = 0
+    pending: list[against.Difference] = field(default_factory=list)
+
+
+def find_conflicts(
+    article_files: dict[str, list[Path]], matched: set[str]
+) -> list[str]:
+    """Files of new articles that would land on a file that already exists."""
+    return [
+        f"{path} already exists but is not the manuscript for {guid}"
+        f' (use --rename "{guid}=<new title>")'
+        for guid, paths in article_files.items()
+        if guid not in matched
+        for path in paths
+        if path.exists()
+    ]
+
+
+def merge_front_matter(existing: str, generated: str) -> str:
+    """Return ``generated`` plus the ``existing`` properties it does not define.
+
+    Extra properties (such as a multi-line ``editorial_note``) are copied
+    verbatim, so hand-written notes survive an overwrite.
+    """
+    head, body = _split(generated)
+    known = {line.partition(":")[0] for line in head if line[:1] not in " \t#-"}
+    extra: list[str] = []
+    keep = False
+    for line in _split(existing)[0]:
+        if line[:1] not in (" ", "\t", "#", "-", ""):
+            keep = line.partition(":")[0] not in known
+        if keep:
+            extra.append(line)
+    return "\n".join(["---", *head, *extra, "---", body])
+
+
+def _split(text: str) -> tuple[list[str], str]:
+    end = text.index("\n---\n", 3)
+    return text[4:end].split("\n"), text[end + 5 :]
+
+
+def apply(
+    files: dict[Path, bytes],
+    article_files: dict[str, list[Path]],
+    comparison: against.Comparison,
+    matched: set[str],
+    force: bool,
+) -> IntoSummary:
+    """Write new articles, and differing ones only with ``force``."""
+    differing = {d.guid: d for d in comparison.differences}
+    summary = IntoSummary()
+    for guid, paths in article_files.items():
+        manuscript = paths[0]
+        if guid not in matched:
+            _write(files, paths)
+            summary.created.append(manuscript.stem)
+        elif guid not in differing:
+            summary.unchanged += 1
+        elif force:
+            existing = manuscript.read_text(encoding="utf-8")
+            generated = files[manuscript].decode("utf-8")
+            files[manuscript] = merge_front_matter(existing, generated).encode("utf-8")
+            _write(files, paths)
+            summary.overwritten.append(manuscript.stem)
+        else:
+            summary.pending.append(differing[guid])
+    return summary
+
+
+def _write(files: dict[Path, bytes], paths: list[Path]) -> None:
+    for path in paths:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_bytes(files[path])

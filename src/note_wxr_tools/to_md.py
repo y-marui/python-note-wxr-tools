@@ -11,7 +11,7 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
 
-from note_wxr_tools import against, manifest
+from note_wxr_tools import against, into, manifest
 from note_wxr_tools.frontmatter import parse as parse_front_matter
 from note_wxr_tools.htmlmd import Block, convert_body, sha256
 from note_wxr_tools.wxr import ASSETS_PREFIX, Export, ExportError, Item, Source, parse
@@ -74,6 +74,7 @@ class Report:
     images: int = 0
     warnings: list[str] = field(default_factory=list)
     comparison: against.Comparison | None = None
+    into: into.IntoSummary | None = None
 
 
 @dataclass
@@ -81,6 +82,7 @@ class _Plan:
     files: dict[Path, bytes] = field(default_factory=dict)
     errors: list[str] = field(default_factory=list)
     report: Report = field(default_factory=Report)
+    article_files: dict[str, list[Path]] = field(default_factory=dict)
 
 
 def sanitize_filename(title: str) -> str:
@@ -117,7 +119,9 @@ class _Converter:
         out: Path,
         allow_lossy: bool,
         renames: dict[str, str],
+        placements: dict[str, Path] | None = None,
     ) -> None:
+        self.placements = placements or {}
         self.source = source
         self.export = export
         self.allow_lossy = allow_lossy
@@ -164,6 +168,8 @@ class _Converter:
         seen: dict[str, str] = {}
         for item, (title, explicit) in zip(self.export.items, titles, strict=True):
             guid = item.fields.get("guid", "")
+            if guid in self.placements:
+                title, explicit = self.placements[guid].stem, True
             if not explicit and counts[title] > 1:
                 title = f"{title} ({guid[:GUID_PREFIX]})"
             stem = sanitize_filename(title)
@@ -247,12 +253,17 @@ class _Converter:
         }
         body = "\n\n".join(block.markdown for block in blocks)
         text = f"{_front_matter(props)}\n\n{body}\n"
-        self.plan.files[self.folder / f"{stem}.md"] = text.encode("utf-8")
-        self.plan.files[self.folder / f"{stem}.note.json"] = _json(
-            self._sidecar(item, blocks)
+        folder = (
+            self.placements[guid].parent if guid in self.placements else self.folder
         )
+        files = {
+            folder / f"{stem}.md": text.encode("utf-8"),
+            folder / f"{stem}.note.json": _json(self._sidecar(item, blocks)),
+        }
         for name, data in images.items():
-            self.plan.files[self.folder / f"{stem}-img" / name] = data
+            files[folder / f"{stem}-img" / name] = data
+        self.plan.files |= files
+        self.plan.article_files[guid] = list(files)
         self.plan.report.articles += 1
         self.plan.report.images += len(images)
         self.image_size += sum(len(data) for data in images.values())
@@ -336,21 +347,32 @@ def convert(
     allow_lossy: bool = False,
     renames: dict[str, str] | None = None,
     against_dir: Path | None = None,
+    into_dir: Path | None = None,
 ) -> Report:
     """Convert ``source`` into ``out`` and return a summary.
 
     With ``against_dir`` nothing is written: the articles are only compared
-    with the manuscripts already in that directory.
+    with the manuscripts already in that directory. With ``into_dir`` new
+    articles are added to that directory (see ``_convert_into``).
     """
     reader = Source(source)
     export = parse(reader.read_xml())
+    placements: dict[str, Path] = {}
+    if into_dir is not None:
+        if not into_dir.is_dir():
+            raise ConversionError(f"not a directory: {into_dir}")
+        found = against.scan_posts(into_dir, against.Comparison())
+        placements = {guid: path for guid, (path, _) in found.items()}
     plan = _Converter(
         reader,
         export,
-        out or Path("."),
+        into_dir or out or Path("."),
         allow_lossy,
         renames or {},
+        placements,
     ).run()
+    if into_dir is not None:
+        return _convert_into(plan, into_dir, set(placements), force)
     if against_dir is not None:
         if plan.errors:
             raise ConversionError("\n".join(plan.errors))
@@ -370,6 +392,23 @@ def convert(
     for path, data in plan.files.items():
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_bytes(data)
+    return plan.report
+
+
+def _convert_into(plan: _Plan, posts: Path, matched: set[str], force: bool) -> Report:
+    """Add new articles to ``posts``; overwrite differing ones only with ``force``.
+
+    The manifest and channel file describe a whole export, so they are not
+    written into an existing posts directory.
+    """
+    plan.errors.extend(into.find_conflicts(plan.article_files, matched))
+    if plan.errors:
+        raise ConversionError("\n".join(plan.errors))
+    comparison = _compare_against(plan, posts)
+    plan.report.warnings.extend(comparison.warnings)
+    plan.report.into = into.apply(
+        plan.files, plan.article_files, comparison, matched, force
+    )
     return plan.report
 
 
@@ -394,7 +433,19 @@ def main(argv: Sequence[str] | None = None) -> int:
         help="only report differences from the manuscripts in POSTS_DIR "
         "(matched by platform_post_id); writes nothing",
     )
-    parser.add_argument("--force", action="store_true", help="overwrite existing files")
+    parser.add_argument(
+        "--into",
+        type=Path,
+        metavar="POSTS_DIR",
+        help="add new articles to POSTS_DIR (matched by platform_post_id); "
+        "articles that differ are reported and, with --force, overwritten "
+        "while keeping extra properties; nothing is deleted",
+    )
+    parser.add_argument(
+        "--force",
+        action="store_true",
+        help="overwrite existing files (with --into: differing manuscripts)",
+    )
     parser.add_argument(
         "--allow-lossy",
         action="store_true",
@@ -409,13 +460,14 @@ def main(argv: Sequence[str] | None = None) -> int:
         help="use TITLE for the article with GUID (repeatable)",
     )
     args = parser.parse_args(argv)
-    if (args.out is None) == (args.against is None):
-        parser.error("give exactly one of --out and --against")
+    if sum(x is not None for x in (args.out, args.against, args.into)) != 1:
+        parser.error("give exactly one of --out, --against and --into")
     try:
         report = convert(
             args.source,
             args.out,
             against_dir=args.against,
+            into_dir=args.into,
             force=args.force,
             allow_lossy=args.allow_lossy,
             renames=dict(args.rename),
@@ -430,8 +482,22 @@ def main(argv: Sequence[str] | None = None) -> int:
             print(f"warning: {warning}", file=sys.stderr)
         print(against.format_report(report.comparison))
         return 0
+    if report.into is not None:
+        return _print_into(report.into)
     print(f"wrote {report.articles} article(s), {report.images} image(s)")
     return 0
+
+
+def _print_into(summary: into.IntoSummary) -> int:
+    print(
+        f"created {len(summary.created)}, overwritten {len(summary.overwritten)}, "
+        f"unchanged {summary.unchanged}, differing {len(summary.pending)}"
+    )
+    if not summary.pending:
+        return 0
+    print("\n".join(against.format_differences(summary.pending)))
+    print("\nnot written: use --force to overwrite the differing manuscripts")
+    return 1
 
 
 if __name__ == "__main__":

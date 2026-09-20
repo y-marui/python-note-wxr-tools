@@ -6,7 +6,7 @@ Origin: [y-marui/obsidian-vault#7](https://github.com/y-marui/obsidian-vault/iss
 
 Implementation is split across #2 (`note-wxr-to-md`), #3 (`note-md-to-wxr`),
 #4 (`note-wxr-validate`, manifest), #5 (tests), #6 (`--image-map`,
-`--allow-lossy`) and #7 (`--against`).
+`--allow-lossy`), #7 (`--against`) and #21 (`--into`).
 
 ## Goal
 
@@ -23,14 +23,15 @@ All commands share the `note-` prefix.
 | Command | Purpose |
 |---|---|
 | `note-wxr-to-md <export.zip\|dir> --out <dir>` | WXR export to Markdown manuscripts, sidecars and images |
+| `note-wxr-to-md <export.zip\|dir> --into <posts dir>` | Add new articles to an existing posts directory |
 | `note-md-to-wxr <article.md>... --out <dir>` | Manuscripts back to a note-importable ZIP |
 | `note-wxr-validate <dir>` | Check manuscripts against this specification |
 
 Common rules:
 
 - Existing files are never overwritten unless `--force` is given.
-- Output is never written into the consuming repository directly; `--out`
-  is always explicit.
+- Output is never written into the consuming repository unless the target is
+  named explicitly with `--out` or `--into`.
 - `note-md-to-wxr` takes explicit article paths only (no batch input file).
 - `note-md-to-wxr` runs the validator first and refuses to write on failure.
 - Every command writes a `manifest.json` next to its output (see Manifest).
@@ -57,6 +58,29 @@ hand-written properties such as `editorial_note` are safe.
   report can still be produced. Other problems, such as a missing image, still
   fail unless `--allow-lossy` is given.
 - The exit code is 0 whether or not differences are found; it is a report.
+
+## Import into a posts directory `--into`
+
+`note-wxr-to-md <export> --into <posts dir>` applies the export to an existing
+posts directory without manual merging. Articles are matched to manuscripts
+(searched recursively) by `platform_post_id`, as in `--against`.
+
+- New article (no manuscript with that id): the manuscript, sidecar and images
+  are written under `<posts dir>/<account>/` (the account folder name replaces
+  `_` with `-`).
+- Matched and unchanged (no difference as defined for `--against`): skipped.
+- Matched and different: nothing is written. The difference report is printed
+  as for `--against` and the exit code is 1. With `--force` the manuscript,
+  its sidecar and images are overwritten in place; the existing file name is
+  kept, and front matter properties the export does not define (such as
+  `editorial_note`, including multi-line values) are copied back.
+- Files that exist only in the posts directory are never deleted.
+- A new article whose file name is already taken by another file fails, and
+  nothing is written (use `--rename`).
+- `manifest.json` and `.note-channel.json` describe a whole export, so they
+  are not written into an existing posts directory.
+- Not combinable with `--out` or `--against`. Filenames follow the Filenames
+  rules; the exit code is 0 when nothing differs.
 
 ## Property mapping
 
