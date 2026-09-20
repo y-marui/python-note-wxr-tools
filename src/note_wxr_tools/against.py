@@ -149,12 +149,7 @@ def format_report(result: Comparison) -> str:
         f"new in export: {len(result.new_in_export)}; "
         f"only in posts: {len(result.only_in_posts)}",
     ]
-    for difference in result.differences:
-        lines.append(f"\n{difference.title} ({difference.guid}): {difference.path}")
-        lines.extend(f"  property {line}" for line in difference.properties)
-        if difference.body:
-            lines.append("  body differs:")
-            lines.extend(f"    {line}" for line in difference.body)
+    lines.extend(format_differences(result.differences))
     for label, items in (
         ("new in export", result.new_in_export),
         ("only in posts", result.only_in_posts),
@@ -163,3 +158,15 @@ def format_report(result: Comparison) -> str:
             lines.append(f"\n{label}:")
             lines.extend(f"  {item}" for item in items)
     return "\n".join(lines)
+
+
+def format_differences(differences: list[Difference]) -> list[str]:
+    """Render the per-article differences, one block per article."""
+    lines: list[str] = []
+    for difference in differences:
+        lines.append(f"\n{difference.title} ({difference.guid}): {difference.path}")
+        lines.extend(f"  property {line}" for line in difference.properties)
+        if difference.body:
+            lines.append("  body differs:")
+            lines.extend(f"    {line}" for line in difference.body)
+    return lines

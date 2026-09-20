@@ -34,6 +34,7 @@ uv run note-wxr-to-md <export.zip|dir> --out <dir>
 - Empty titles become `無題 (YYYY-MM-DD <guid prefix>)` and duplicate titles get ` (<guid prefix>)` appended, so no manual step is needed. Override any title with `--rename "<guid>=<new title>"`.
 - Lossy conversions fail; `--allow-lossy` downgrades them to warnings.
 - `--against <posts dir>` only reports differences and writes nothing (not combinable with `--out`). It matches manuscripts you imported by hand by `platform_post_id` and lists property and body differences; the posts directory is never written.
+- `--into <posts dir>` adds new articles to an existing posts directory (not combinable with `--out` or `--against`). Matched, unchanged articles are skipped; matched articles that differ are reported like `--against` and exit 1 without writing. `--force` overwrites them while keeping extra properties such as `editorial_note`. Files only in the posts directory are never deleted.
 - See [docs/specification.md](docs/specification.md) for the specification.
 
 ### note-wxr-validate
