@@ -4,7 +4,7 @@ import zipfile
 from pathlib import Path
 
 ITEM = """<item><title><![CDATA[{title}]]></title><link>https://note.com/acct_x/n/{guid}</link>\
-<dc:creator><![CDATA[Display]]></dc:creator><guid isPermaLink="false">{guid}</guid>\
+<dc:creator><![CDATA[Synthetic]]></dc:creator><guid isPermaLink="false">{guid}</guid>\
 <description></description><content:encoded><![CDATA[{body}]]></content:encoded>\
 <excerpt:encoded></excerpt:encoded><wp:post_id>{post_id}</wp:post_id>\
 <pubDate>Wed, 04 Sep 2019 17:39:39 +0900</pubDate>\

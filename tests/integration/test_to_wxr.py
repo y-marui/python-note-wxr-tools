@@ -31,7 +31,7 @@ def workspace(make_export: MakeExport, tmp_path: Path) -> tuple[Path, str]:
         make_item(guid="n2", title="Two", body="<p>Two</p>", status="draft", post_id=2),
     ]
     export = make_export(items, {"a.png": b"PNG"})
-    convert(export, tmp_path / "md")
+    convert(export, tmp_path / "md", with_sidecar=True)
     return tmp_path / "md" / "acct-x", WXR.format(items="".join(items))
 
 
@@ -119,7 +119,7 @@ def test_convert_uses_the_renamed_title(
     make_export: MakeExport, tmp_path: Path
 ) -> None:
     export = make_export([make_item(title="")])
-    convert(export, tmp_path / "md", renames={"n1": "Named"})
+    convert(export, tmp_path / "md", renames={"n1": "Named"}, with_sidecar=True)
 
     zip_path = _run(tmp_path / "md" / "acct-x", tmp_path, ["Named"])
     assert "<title><![CDATA[Named]]></title>" in _xml(zip_path)
@@ -145,7 +145,7 @@ def test_convert_requires_the_channel_file(
         _run(folder, tmp_path)
 
 
-def test_convert_rejects_articles_missing_from_the_channel(
+def test_convert_orders_articles_by_creation_date_not_by_channel_guids(
     workspace: tuple[Path, str], tmp_path: Path
 ) -> None:
     folder, _ = workspace
@@ -153,8 +153,9 @@ def test_convert_rejects_articles_missing_from_the_channel(
     data = json.loads(channel.read_text("utf-8"))
     data["guids"] = ["n2"]
     channel.write_text(json.dumps(data), "utf-8")
-    with pytest.raises(ConversionError, match="not in .note-channel.json: n1"):
+    assert '<guid isPermaLink="false">n1</guid>' in _xml(
         _run(folder, tmp_path, ["One"])
+    )
 
 
 def test_convert_rejects_bad_article_arguments(

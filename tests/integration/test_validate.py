@@ -16,7 +16,7 @@ IMAGE_BODY = '<figure><img src="/assets/a.png"><figcaption></figcaption></figure
 @pytest.fixture
 def folder(make_export: MakeExport, tmp_path: Path) -> Path:
     export = make_export([make_item(body=IMAGE_BODY)], {"a.png": b"PNG"})
-    convert(export, tmp_path / "out")
+    convert(export, tmp_path / "out", with_sidecar=True)
     return tmp_path / "out" / "acct-x"
 
 
@@ -83,7 +83,7 @@ def test_validate_downgrades_image_problems_when_manifest_allows_lossy(
     make_export: MakeExport, tmp_path: Path
 ) -> None:
     export = make_export([make_item(body='<p><img src="https://e.com/x.png"></p>')])
-    convert(export, tmp_path / "out", allow_lossy=True)
+    convert(export, tmp_path / "out", allow_lossy=True, with_sidecar=True)
 
     result = validate(tmp_path / "out" / "acct-x")
     assert result.errors == []
@@ -98,7 +98,7 @@ def test_validate_reports_sidecar_problems(folder: Path) -> None:
     assert "unexpected structure" in "\n".join(validate(folder).errors)
 
     (folder / "Title.note.json").unlink()
-    assert "Title.note.json: file is missing" in validate(folder).errors
+    assert validate(folder).errors == []
 
 
 def test_validate_reports_manifest_drift(folder: Path) -> None:
@@ -107,15 +107,27 @@ def test_validate_reports_manifest_drift(folder: Path) -> None:
         data["articles"].append({"guid": "gone", "title": "G", "body_sha256": "2" * 64})
 
     _edit_json(folder / MANIFEST_NAME, change)
-    errors = "\n".join(validate(folder).errors)
-    assert "body hash of Title differs from sidecar" in errors
-    assert "article G not found on disk" in errors
-    assert "overall body_sha256" in errors
+    result = validate(folder)
+    warnings = "\n".join(result.warnings)
+    assert "body hash of Title differs from the manuscript" in warnings
+    assert "article G not found on disk" in warnings
+    assert "overall body_sha256" in "\n".join(result.errors)
 
 
-def test_validate_reports_missing_manifest(folder: Path) -> None:
+def test_validate_accepts_a_missing_manifest(folder: Path) -> None:
     (folder / MANIFEST_NAME).unlink()
-    assert "manifest.json: file is missing" in validate(folder).errors
+    assert validate(folder).errors == []
+
+
+def test_validate_does_not_require_platform_post_id(folder: Path) -> None:
+    md = folder / "Title.md"
+    lines = [
+        line
+        for line in md.read_text("utf-8").split("\n")
+        if not line.startswith("platform_post_id")
+    ]
+    md.write_text("\n".join(lines), "utf-8")
+    assert validate(folder).errors == []
 
 
 def test_validate_warns_when_image_totals_are_stale(folder: Path) -> None:
@@ -154,9 +166,9 @@ def test_main_exit_codes(folder: Path, capsys: pytest.CaptureFixture[str]) -> No
     assert main([str(folder)]) == 0
     assert capsys.readouterr().out == "ok\n"
 
-    (folder / MANIFEST_NAME).unlink()
+    (folder / "Title.md").write_text("no front matter", "utf-8")
     assert main([str(folder)]) == 1
-    assert "error: manifest.json" in capsys.readouterr().err
+    assert "error: Title.md" in capsys.readouterr().err
 
 
 def test_validate_downgrades_duplicate_guid_when_lossy_is_allowed(folder: Path) -> None:

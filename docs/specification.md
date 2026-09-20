@@ -22,7 +22,7 @@ All commands share the `note-` prefix.
 
 | Command | Purpose |
 |---|---|
-| `note-wxr-to-md <export.zip\|dir> --out <dir>` | WXR export to Markdown manuscripts, sidecars and images |
+| `note-wxr-to-md <export.zip\|dir> --out <dir>` | WXR export to Markdown manuscripts and images (sidecars with `--with-sidecar`) |
 | `note-wxr-to-md <export.zip\|dir> --into <posts dir>` | Add new articles to an existing posts directory |
 | `note-md-to-wxr <article.md>... --out <dir>` | Manuscripts back to a note-importable ZIP |
 | `note-wxr-validate <dir>` | Check manuscripts against this specification |
@@ -65,13 +65,13 @@ hand-written properties such as `editorial_note` are safe.
 posts directory without manual merging. Articles are matched to manuscripts
 (searched recursively) by `platform_post_id`, as in `--against`.
 
-- New article (no manuscript with that id): the manuscript, sidecar and images
-  are written under `<posts dir>/<account>/` (the account folder name replaces
+- New article (no manuscript with that id): the manuscript and images (and the
+  sidecar with `--with-sidecar`) are written under `<posts dir>/<account>/` (the account folder name replaces
   `_` with `-`).
 - Matched and unchanged (no difference as defined for `--against`): skipped.
 - Matched and different: nothing is written. The difference report is printed
   as for `--against` and the exit code is 1. With `--force` the manuscript,
-  its sidecar and images are overwritten in place; the existing file name is
+  its images (and sidecar, with `--with-sidecar`) are overwritten in place; the existing file name is
   kept, and front matter properties the export does not define (such as
   `editorial_note`, including multi-line values) are copied back.
 - Matched and different, but the existing manuscript has
@@ -85,19 +85,21 @@ posts directory without manual merging. Articles are matched to manuscripts
   nothing is written (use `--rename`).
 - Matched articles that are left untouched (unchanged, or kept as
   `needs_update`) still get the files they lack, so the account can be
-  re-exported: a missing `<title>.note.json` and missing images under
-  `<title>-img/` are written from the export, and the `.md` is never touched.
-  For kept articles the sidecar holds the export's original blocks, which the
-  regeneration rule expects (edited blocks are regenerated from the manuscript).
-  An existing sidecar is replaced only with `--force`; existing images are
-  kept. The summary reports `sidecars written N`.
+  re-exported: missing images under `<title>-img/` are written from the
+  export, and the `.md` is never touched. With `--with-sidecar` a missing
+  `<title>.note.json` is written too; for kept articles it holds the export's
+  original blocks, which the regeneration rule expects (edited blocks are
+  regenerated from the manuscript). An existing sidecar is replaced only with
+  `--force`; existing images are kept. The summary reports
+  `sidecars written N`.
 - `<account>/manifest.json` is rewritten after each run to describe the
   manuscripts now in the account folder (articles, body hashes, counts),
   including those that exist only in the posts directory, so
   `note-wxr-validate` and `note-md-to-wxr` accept the folder. It is left
-  untouched when those values are already current. `command` is
+  untouched when the article list and counts are already current (body hashes
+  are ignored, so editing a manuscript does not rewrite it). `command` is
   `note-wxr-to-md --into`, and `inputs` lists the export's files. Manuscripts
-  without a readable sidecar are not listed, so validation still reports them.
+  that cannot be read are not listed, so validation still reports them.
 - `<account>/.note-channel.json` is created when missing, so an imported
   account can be re-exported with `note-md-to-wxr`. When it exists, the
   `channel` and `author` fields are replaced by the export's and `guids`
@@ -114,6 +116,7 @@ Each article's front matter is derived from the WXR `<item>`:
 | Front matter property | WXR source | Notes |
 |---|---|---|
 | `title` | `title` | Equals the filename stem (see Filenames) |
+| `note_title` | `title` | Only when the stem is the filename-safe form of a different original title; `note-md-to-wxr` uses it as the item title |
 | `account` | `wp:author_login` | |
 | `platform_post_id` | `guid` | Unique per article |
 | `publication_url` | `link` | Omitted for drafts |
@@ -127,7 +130,7 @@ Each article's front matter is derived from the WXR `<item>`:
 (an export with several authors fails). An export ZIP or directory must
 contain exactly one XML file.
 
-The remaining item fields live in the sidecar.
+The remaining item fields are constant or derived (see `note-md-to-wxr` output); the optional sidecar keeps them verbatim.
 
 ## Output layout
 
@@ -135,7 +138,7 @@ The remaining item fields live in the sidecar.
 <out>/<account-folder>/
   .note-channel.json
   <title>.md
-  <title>.note.json
+  <title>.note.json          (only with --with-sidecar)
   <title>-img/<image files>
   manifest.json
 ~~~
@@ -172,25 +175,41 @@ on any error. `<item>` elements follow the `guids` order of
 `.note-channel.json`, and only the given articles are included; a guid missing
 from that list is an error.
 
-WXR fields are rebuilt from the front matter and the sidecar:
+WXR fields are rebuilt from the front matter, the Markdown body and
+`.note-channel.json`. The sidecar is not needed; when
+`<title>.note.json` exists it is still read (see below).
 
 | WXR field | Source |
 |---|---|
-| `title` | Sidecar `title`, unless the manuscript was renamed (then the front matter `title`) |
-| `link` | Front matter `publication_url`, else sidecar `link` |
-| `guid` | `platform_post_id` |
+| `title` | Front matter `note_title`, else the front matter `title` (with a sidecar: its `title`, unless the manuscript was renamed) |
+| `link` | Front matter `publication_url`, else `<channel link>/n/<guid>` |
+| `guid` | `platform_post_id`; without it, `n` plus the first 12 hex digits of SHA-256 of `<account>/<title>` (stable, so re-exports keep the id) |
 | `wp:post_date`, `wp:post_modified` | `platform_created_at`, `platform_updated_at` (local part) |
 | `wp:post_date_gmt`, `wp:post_modified_gmt` | The same values converted to UTC |
+| `pubDate` | `platform_created_at` in RFC 2822 form |
 | `wp:status` | `draft` for `draft`; `publish` for `published` and `needs_update` |
-| everything else | Sidecar item fields |
+| `wp:post_id` | Sequence number (1, 2, ...) in output order |
+| `dc:creator` | The channel `title` of `.note-channel.json` |
+| `wp:post_type`, `wp:post_parent`, `wp:menu_order`, `wp:is_sticky`, `wp:comment_status`, `wp:ping_status`, `wp:post_password`, `excerpt:encoded`, `description` | Constants: `post`, `0`, `0`, `0`, `open`, `open`, empty, empty, empty (the same in all real exports checked) |
+| `wp:post_name` | Empty |
+| `content:encoded` | Every Markdown block converted to HTML (see below) |
 
-`pubDate` is taken from the sidecar and is not updated when the dates are
-edited. Element order and CDATA use follow note's export format, so an
-unedited export is reproduced byte for byte.
+Items are ordered by `platform_created_at` (then `guid`); the `guids` list of
+`.note-channel.json` is no longer used. Element order and CDATA use follow
+note's export format. Rebuilt bodies carry no `name`/`id` attributes, so the
+output is not byte-identical to an export: the byte-exact round trip needs
+`--with-sidecar`, where unedited blocks reuse their original HTML and
+`pubDate` and the other fields come from the sidecar.
 
-## Sidecar `<title>.note.json`
+Known differences seen when importing a body without those attributes into
+note (cause not yet established): a paragraph containing only a URL is shown as
+a plain link instead of a link card, and line breaks inside a `<blockquote>`
+were lost.
 
-Stored next to each article. It holds everything the Markdown cannot:
+## Sidecar `<title>.note.json` (optional)
+
+Written next to each article only with `note-wxr-to-md --with-sidecar`, and
+read by `note-md-to-wxr` when present. It holds everything the Markdown cannot:
 
 - **Blocks**: for each top-level HTML block of `content:encoded`, in order,
   the original HTML (including attributes such as `name`) and the hash of
@@ -212,8 +231,8 @@ the original body.
 
 ### Regeneration rule
 
-On `note-md-to-wxr`, each block of the manuscript is compared with the
-sidecar:
+With a sidecar, `note-md-to-wxr` compares each block of the manuscript with
+it:
 
 - Markdown hash unchanged: the original HTML is reused verbatim.
 - Markdown edited: the block is regenerated from the Markdown.
@@ -245,6 +264,9 @@ paragraphs, other block elements or no text keeps the whole list as raw HTML.
 Any other block, or an empty one, is kept as
 raw HTML (blank lines inside it are removed) and reported as a warning.
 Attributes such as `name` are not kept in Markdown; the sidecar keeps them.
+A bold or italic run that starts or ends with a `<br>` keeps the break outside
+the emphasis markers (`<b>a<br></b>` becomes `**a**` plus a hard break), so the
+markers stay balanced.
 
 ## Account-level `.note-channel.json`
 
@@ -253,7 +275,8 @@ Data shared by all articles of an account:
 - Channel fields (`title`, `link`, `description`, `pubDate`, `language`,
   `wp:wxr_version`, ...), keyed by WXR tag name under `channel`.
 - The `wp:author` block, under `author`.
-- Article order: `guids`, a list of `guid`, used to order `<item>` elements.
+- `guids`, a list of `guid`. It records the export's order but is no longer
+  used: `<item>` elements are ordered by `platform_created_at`.
 
 `note-md-to-wxr` fails if this file is missing.
 
@@ -275,7 +298,7 @@ Data shared by all articles of an account:
 
 | Situation | Default | With `--allow-lossy` |
 |---|---|---|
-| Dropped metadata (an item field not representable) | failure | warning |
+| Dropped metadata (an item field not representable, or, without `--with-sidecar`, one that differs from the constants of `note-md-to-wxr`) | failure | warning |
 | Missing image attachment | failure | warning |
 | Unresolved image URL | failure | warning |
 | `guid` collision | failure | warning |
@@ -305,13 +328,15 @@ account folder). JSON with these keys:
 | `inputs` | `path` and `sha256` of each input file: the export XML and every copied `assets/<file>` |
 | `article_count`, `image_count` | Counts of articles and image files written |
 | `total_size` | Total bytes of the image files written |
-| `articles` | Per article: `guid`, `title` (filename stem) and `body_sha256` (hash of the original `content:encoded`) |
+| `articles` | Per article: `guid`, `title` (filename stem) and `body_sha256` (hash of the manuscript body, that is the text after the front matter) |
 | `body_sha256` | Overall body hash: SHA-256 of the per-article body hashes, ordered by `guid` and joined by newlines |
 | `warnings` | Warnings raised by the run |
 
-`note-wxr-validate` checks that the manifest matches the files on disk.
-Manuscripts may be edited after conversion, so the manifest describes the
-original bodies (the sidecar hashes), not the Markdown text.
+`note-wxr-validate` checks a manifest when one exists (it is not required).
+Manuscripts may be edited or added after conversion, so per-article
+differences (a changed body hash, a missing or unlisted article) are
+warnings; only a manifest whose overall hash contradicts its own article list
+is an error.
 
 ## Validation
 
@@ -321,22 +346,23 @@ at once. It exits 1 if there is any error. Only `*.md` files other than
 documentation and is ignored. It checks:
 
 - Required properties are present and consistent: `title` (equal to the
-  filename stem), `account`, `platform_post_id`, `platform_created_at` and
+  filename stem), `account`, `platform_created_at` and
   `platform_updated_at` (ISO 8601 with an offset), `publication_status` (one
   of `draft`, `published`, `needs_update`), `platform` (`note`) and `origin`.
   A `published` article also needs `publication_url`. `platform_post_id` is
-  unique.
+  optional (articles made in Obsidian have none) but unique when present.
 - Every image reference (Markdown and `<img>`) points to an existing file
   under `<title>-img/`. A remote URL, a path elsewhere or a missing file is an
   error, or a warning when the manifest says `allow_lossy`.
-- The sidecar exists, has the expected structure, and its block HTML
+- A sidecar, if present, has the expected structure and its block HTML
   concatenates to its `body_sha256`. Block Markdown hashes are not compared:
   they differ from the manuscript once a block is edited, which is what the
-  regeneration rule relies on.
-- The manifest exists and matches the disk: the same articles (`guid`,
-  `title`), the per-article and overall body hashes and `article_count` are
-  errors. A stale `image_count` or `total_size` is only a warning, since
-  images may be added to a manuscript later.
+  regeneration rule relies on. A missing sidecar is fine.
+- A manifest, if present, matches the disk. Differing articles (`guid`,
+  `title`), per-article body hashes, `article_count`, and stale `image_count`
+  or `total_size` are warnings, since manuscripts and images change after
+  conversion; an overall body hash that contradicts the manifest's own
+  articles is an error.
 
 ## Dependencies
 

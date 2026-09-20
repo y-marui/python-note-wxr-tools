@@ -46,7 +46,7 @@ def _generated_titles(export_zip: Path, folder: Path) -> dict[str, str]:
 def test_real_export_round_trips_byte_for_byte(
     export_zip: Path, tmp_path: Path
 ) -> None:
-    to_md(export_zip, tmp_path / "md", allow_lossy=True)
+    to_md(export_zip, tmp_path / "md", allow_lossy=True, with_sidecar=True)
     folder = next((tmp_path / "md").iterdir())
     assert validate(folder).errors == []
 

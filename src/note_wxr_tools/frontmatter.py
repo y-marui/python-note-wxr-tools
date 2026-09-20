@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 
 
@@ -46,3 +47,11 @@ def _scalar(value: str) -> str:
     if value[:1] in ("|", ">"):
         return ""
     return value
+
+
+def article_guid(props: dict[str, str], stem: str) -> str:
+    """Return ``platform_post_id``, or a stable id for an Obsidian-made article."""
+    if props.get("platform_post_id"):
+        return props["platform_post_id"]
+    seed = f"{props.get('account', '')}/{stem}".encode()
+    return "n" + hashlib.sha256(seed).hexdigest()[:12]

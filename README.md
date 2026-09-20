@@ -29,12 +29,13 @@ Convert a note export (ZIP or extracted directory) into Markdown manuscripts.
 uv run note-wxr-to-md <export.zip|dir> --out <dir>
 ```
 
-- Writes articles (`.md`), sidecars (`.note.json`), images (`<title>-img/`) and `.note-channel.json` under `<account>/` in `--out`.
+- Writes articles (`.md`), images (`<title>-img/`) and `.note-channel.json` under `<account>/` in `--out`. A `note_title` property keeps the original title when it differs from the filename-safe one.
+- `--with-sidecar` also writes `<title>.note.json` sidecars (original block HTML and item fields), which `note-md-to-wxr` reuses when present; without them the WXR is rebuilt from the front matter and Markdown.
 - Existing files are never overwritten unless `--force` is given.
 - Empty titles become `無題 (YYYY-MM-DD <guid prefix>)` and duplicate titles get ` (<guid prefix>)` appended, so no manual step is needed. Override any title with `--rename "<guid>=<new title>"`.
 - Lossy conversions fail; `--allow-lossy` downgrades them to warnings.
 - `--against <posts dir>` only reports differences and writes nothing (not combinable with `--out`). It matches manuscripts you imported by hand by `platform_post_id` and lists property and body differences; the posts directory is never written.
-- `--into <posts dir>` adds new articles to an existing posts directory (not combinable with `--out` or `--against`). Matched, unchanged articles are skipped; matched articles that differ are reported like `--against` and exit 1 without writing. `--force` overwrites them while keeping extra properties such as `editorial_note`. Manuscripts with `publication_status: needs_update` are never overwritten, even with `--force` (reported as `kept (needs_update)`, exit code unaffected); `--overwrite-needs-update` lifts that. Files only in the posts directory are never deleted. Missing sidecars and images of unchanged or kept articles are written (existing sidecars only with `--force`; the manuscript is never touched), and `<account>/manifest.json` is kept up to date, so `note-wxr-validate` and `note-md-to-wxr` accept the folder. `<account>/.note-channel.json` is created when missing, or updated by adding new guids (nothing is removed), so the account can be re-exported with `note-md-to-wxr`.
+- `--into <posts dir>` adds new articles to an existing posts directory (not combinable with `--out` or `--against`). Matched, unchanged articles are skipped; matched articles that differ are reported like `--against` and exit 1 without writing. `--force` overwrites them while keeping extra properties such as `editorial_note`. Manuscripts with `publication_status: needs_update` are never overwritten, even with `--force` (reported as `kept (needs_update)`, exit code unaffected); `--overwrite-needs-update` lifts that. Files only in the posts directory are never deleted. Missing images of unchanged or kept articles are written (with `--with-sidecar`, missing sidecars too; existing sidecars only with `--force`; the manuscript is never touched), and `<account>/manifest.json` is kept up to date, so `note-wxr-validate` and `note-md-to-wxr` accept the folder. `<account>/.note-channel.json` is created when missing, or updated by adding new guids (nothing is removed), so the account can be re-exported with `note-md-to-wxr`.
 - See [docs/specification.md](docs/specification.md) for the specification.
 
 ### note-wxr-validate
@@ -45,7 +46,7 @@ Check a converted account folder against the specification. Exits 1 on any error
 uv run note-wxr-validate <dir>
 ```
 
-- Checks required properties, image references, sidecar hashes and that `manifest.json` matches the files on disk.
+- Checks required properties, image references and, when present, sidecar hashes. A `manifest.json`, if present, is checked too; differences per article are warnings.
 - `README.md` and hidden files in the folder are not treated as manuscripts.
 - `note-wxr-to-md` writes `manifest.json` into the same folder.
 
@@ -58,6 +59,7 @@ uv run note-md-to-wxr <article.md>... --out <dir>
 ```
 
 - Runs the validator first and writes nothing if it fails.
+- Builds every item from the front matter, the Markdown body and `.note-channel.json` (items are ordered by `platform_created_at`, `post_id` is assigned in order); an existing `<title>.note.json` is still used when present. Articles without `platform_post_id` (made in Obsidian) get a generated, stable guid.
 - Unedited blocks reuse their original HTML; only edited blocks are regenerated from Markdown.
 - Writes `note-<account>-1.zip` and `manifest.json` into `--out`. Existing files are not overwritten without `--force`.
 - `--image-map <map.json>` replaces `/assets/` references with public HTTPS URLs (`{"<file>": "https://..."}`). Any unmapped image is an error, and the output is not byte-identical to the export.

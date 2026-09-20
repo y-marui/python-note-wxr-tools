@@ -15,6 +15,7 @@ from note_wxr_tools import against, into, manifest
 from note_wxr_tools.frontmatter import parse as parse_front_matter
 from note_wxr_tools.htmlmd import Block, convert_body, sha256
 from note_wxr_tools.wxr import ASSETS_PREFIX, Export, ExportError, Item, Source, parse
+from note_wxr_tools.wxrwriter import ITEM_DEFAULTS
 
 PLATFORM = "note"
 ORIGIN = "note.com export"
@@ -126,7 +127,9 @@ class _Converter:
         allow_lossy: bool,
         renames: dict[str, str],
         placements: dict[str, Path] | None = None,
+        with_sidecar: bool = False,
     ) -> None:
+        self.with_sidecar = with_sidecar
         self.placements = placements or {}
         self.source = source
         self.export = export
@@ -224,6 +227,8 @@ class _Converter:
             return
         for tag in sorted(set(fields) - KNOWN_FIELDS):
             self.lossy(f"{guid}: item field {tag} cannot be represented")
+        if not self.with_sidecar:
+            self._check_defaults(guid, fields)
         if item.guid_attrs != {"isPermaLink": "false"}:
             self.lossy(f"{guid}: unexpected guid attributes {item.guid_attrs}")
         status = fields["wp:status"]
@@ -250,6 +255,8 @@ class _Converter:
             "account": self.account,
             "platform_post_id": guid,
         }
+        if fields["title"] != stem and sanitize_filename(fields["title"]) == stem:
+            props["note_title"] = fields["title"]
         if status == "publish":
             props["publication_url"] = fields["link"]
         props |= {
@@ -264,10 +271,9 @@ class _Converter:
         folder = (
             self.placements[guid].parent if guid in self.placements else self.folder
         )
-        files = {
-            folder / f"{stem}.md": text.encode("utf-8"),
-            folder / f"{stem}.note.json": _json(self._sidecar(item, blocks)),
-        }
+        files = {folder / f"{stem}.md": text.encode("utf-8")}
+        if self.with_sidecar:
+            files[folder / f"{stem}.note.json"] = _json(self._sidecar(item, blocks))
         for name, data in images.items():
             files[folder / f"{stem}-img" / name] = data
         self.plan.files |= files
@@ -277,9 +283,18 @@ class _Converter:
         self.image_size += sum(len(data) for data in images.values())
         for name, data in images.items():
             self.inputs[f"assets/{name}"] = manifest.sha256_bytes(data)
-        self.entries.append(
-            manifest.ArticleEntry(guid, stem, sha256(fields["content:encoded"]))
-        )
+        manuscript_body = parse_front_matter(text)[1]
+        self.entries.append(manifest.ArticleEntry(guid, stem, sha256(manuscript_body)))
+
+    def _check_defaults(self, guid: str, fields: dict[str, str]) -> None:
+        """Report item fields that cannot be restored without a sidecar."""
+        expected = ITEM_DEFAULTS | {"dc:creator": self.export.channel.get("title", "")}
+        for tag, value in expected.items():
+            if tag != "wp:post_name" and fields.get(tag, value) != value:
+                self.lossy(
+                    f"{guid}: item field {tag} differs from the default "
+                    "and is lost without --with-sidecar"
+                )
 
     def _image_resolver(self, guid: str, stem: str, images: dict[str, bytes]):  # type: ignore[no-untyped-def]
         def resolve(src: str) -> str:
@@ -358,8 +373,11 @@ def convert(
     renames: dict[str, str] | None = None,
     against_dir: Path | None = None,
     into_dir: Path | None = None,
+    with_sidecar: bool = False,
 ) -> Report:
     """Convert ``source`` into ``out`` and return a summary.
+
+    ``<title>.note.json`` sidecars are written only with ``with_sidecar``.
 
     With ``against_dir`` nothing is written: the articles are only compared
     with the manuscripts already in that directory. With ``into_dir`` new
@@ -380,6 +398,7 @@ def convert(
         allow_lossy,
         renames or {},
         placements,
+        with_sidecar,
     ).run()
     if into_dir is not None:
         return _convert_into(
@@ -461,11 +480,23 @@ def _write_manifest(plan: _Plan) -> None:
         current = json.loads(path.read_text(encoding="utf-8"))
     except (OSError, ValueError):
         current = None
-    # Leave an up-to-date manifest alone so a no-op run touches nothing.
-    keys = ("articles", "article_count", "image_count", "total_size", "body_sha256")
-    if isinstance(current, dict) and all(current.get(k) == document[k] for k in keys):
+    # Leave an up-to-date manifest alone so a no-op run touches nothing. Body
+    # hashes are ignored: editing a manuscript does not make the manifest stale.
+    keys = ("article_count", "image_count", "total_size")
+    if (
+        isinstance(current, dict)
+        and all(current.get(k) == document[k] for k in keys)
+        and _listing(current) == _listing(document)
+    ):
         return
     path.write_bytes(_json(document))
+
+
+def _listing(document: dict[str, object]) -> list[tuple[object, object]]:
+    articles = document.get("articles")
+    if not isinstance(articles, list):
+        return []
+    return [(a.get("guid"), a.get("title")) for a in articles if isinstance(a, dict)]
 
 
 def _rename(value: str) -> tuple[str, str]:
@@ -514,6 +545,12 @@ def main(argv: Sequence[str] | None = None) -> int:
         help="downgrade lossy failures to warnings",
     )
     parser.add_argument(
+        "--with-sidecar",
+        action="store_true",
+        help="also write <title>.note.json sidecars (original block HTML and "
+        "item fields); note-md-to-wxr reuses them when present",
+    )
+    parser.add_argument(
         "--rename",
         action="append",
         default=[],
@@ -534,6 +571,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             overwrite_needs_update=args.overwrite_needs_update,
             allow_lossy=args.allow_lossy,
             renames=dict(args.rename),
+            with_sidecar=args.with_sidecar,
         )
     except (ExportError, ConversionError, OSError) as error:
         print(f"error: {error}", file=sys.stderr)
