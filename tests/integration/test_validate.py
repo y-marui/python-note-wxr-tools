@@ -31,6 +31,13 @@ def test_validate_converter_output_is_clean(folder: Path) -> None:
     assert (result.errors, result.warnings) == ([], [])
 
 
+def test_validate_ignores_readme_and_hidden_markdown(folder: Path) -> None:
+    (folder / "README.md").write_text("# Notes about this account\n", "utf-8")
+    (folder / ".scratch.md").write_text("no front matter\n", "utf-8")
+    result = validate(folder)
+    assert (result.errors, result.warnings) == ([], [])
+
+
 def test_validate_reports_missing_and_invalid_properties(folder: Path) -> None:
     md = folder / "Title.md"
     text = md.read_text("utf-8")

@@ -291,7 +291,9 @@ original bodies (the sidecar hashes), not the Markdown text.
 ## Validation
 
 `note-wxr-validate <dir>` takes the account folder and reports every problem
-at once. It exits 1 if there is any error. It checks:
+at once. It exits 1 if there is any error. Only `*.md` files other than
+`README.md` and hidden files are manuscripts; `README.md` is account
+documentation and is ignored. It checks:
 
 - Required properties are present and consistent: `title` (equal to the
   filename stem), `account`, `platform_post_id`, `platform_created_at` and

@@ -201,6 +201,7 @@ def _check_image_totals(folder: Path, data: dict[str, object], result: Result) -
 def validate(folder: Path, *, allow_lossy: bool = False) -> Result:
     """Validate an account folder written by ``note-wxr-to-md``.
 
+    ``README.md`` and hidden files are documentation, not manuscripts.
     With ``allow_lossy`` (or when the manifest records it) image problems and
     guid collisions are warnings instead of errors.
     """
@@ -212,7 +213,11 @@ def validate(folder: Path, *, allow_lossy: bool = False) -> Result:
     allow_lossy = allow_lossy or bool(
         manifest_data and manifest_data.get("allow_lossy") is True
     )
-    paths = sorted(folder.glob("*.md"))
+    paths = sorted(
+        p
+        for p in folder.glob("*.md")
+        if p.name != "README.md" and not p.name.startswith(".")
+    )
     if not paths:
         result.errors.append("no manuscripts (*.md) found")
     articles = [

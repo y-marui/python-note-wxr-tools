@@ -46,6 +46,7 @@ uv run note-wxr-validate <dir>
 ```
 
 - 必須プロパティ、画像の参照先、サイドカーのハッシュ、`manifest.json` とディスクの一致を確認する。
+- フォルダ内の `README.md` と隠しファイルは原稿として扱わない。
 - `note-wxr-to-md` は同じフォルダに `manifest.json` を書き出す。
 
 ### note-md-to-wxr

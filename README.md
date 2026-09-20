@@ -46,6 +46,7 @@ uv run note-wxr-validate <dir>
 ```
 
 - Checks required properties, image references, sidecar hashes and that `manifest.json` matches the files on disk.
+- `README.md` and hidden files in the folder are not treated as manuscripts.
 - `note-wxr-to-md` writes `manifest.json` into the same folder.
 
 ### note-md-to-wxr
