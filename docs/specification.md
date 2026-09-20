@@ -202,9 +202,22 @@ output is not byte-identical to an export: the byte-exact round trip needs
 `pubDate` and the other fields come from the sidecar.
 
 Known differences seen when importing a body without those attributes into
-note (cause not yet established): a paragraph containing only a URL is shown as
-a plain link instead of a link card, and line breaks inside a `<blockquote>`
-were lost.
+note: a paragraph containing only a URL is shown as a plain link instead of a
+link card, and line breaks inside a `<blockquote>` were lost. The cause is not
+confirmed by importing into note. What a real export shows for the same blocks:
+
+- A link card source is `<p name="uuid"><a href="URL">URL</a></p>`. The rebuilt
+  `<p><a href="URL">URL</a></p>` differs only by the `name` attribute.
+- Blockquotes carry `<br>` line breaks in two shapes, both with `name` (and
+  usually `id`) attributes: `<blockquote name="short-id">a<br>b</blockquote>`
+  and `<blockquote><p name="uuid" id="uuid">a<br>b</p></blockquote>`. The
+  rebuilt `<blockquote><p>a<br>b</p></blockquote>` keeps `<br>` but has no
+  attributes.
+
+The generated HTML already matches the original tags, so the missing editor
+attributes are the likely cause. Generating `name` attributes for rebuilt
+blocks is the next thing to try; use `--with-sidecar` for articles that need
+the original HTML meanwhile.
 
 ## Sidecar `<title>.note.json` (optional)
 
