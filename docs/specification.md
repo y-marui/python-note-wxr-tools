@@ -53,7 +53,7 @@ hand-written properties such as `editorial_note` are safe.
 - It also lists articles that are new in the export and manuscripts that are
   only in the posts directory, limited to those without an `account` or with
   the export's account (`_` and `-` are treated alike).
-- Articles with an empty or duplicate title are named `untitled-<guid>` so the
+- Empty and duplicate titles are named automatically (see Filenames), so the
   report can still be produced. Other problems, such as a missing image, still
   fail unless `--allow-lossy` is given.
 - The exit code is 0 whether or not differences are found; it is a report.
@@ -209,9 +209,14 @@ Data shared by all articles of an account:
 
 - Characters unusable in filenames become their full-width forms
   (`/` to `／`, `:` to `：`, and so on).
-- Two articles with the same resulting title fail, unless resolved with
-  `--rename "<guid>=<new title>"`. The renamed title is written to the
-  front matter `title`.
+- An empty title becomes `無題 (YYYY-MM-DD <guid first 6 chars>)`, with the
+  date from `platform_created_at` (for example `無題 (2026-03-18 n8bd10)`).
+- Every article that shares its title with another gets
+  ` (<guid first 6 chars>)` appended, so the names do not depend on article
+  order and re-running gives the same filenames. Other titles are unchanged.
+- The generated title is written to the front matter `title`.
+  `--rename "<guid>=<new title>"` overrides it explicitly.
+- A name that still collides (for example with a renamed title) fails.
 - The account folder name replaces `_` with `-`.
 
 ## Lossy policy

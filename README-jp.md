@@ -31,7 +31,7 @@ uv run note-wxr-to-md <export.zip|dir> --out <dir>
 
 - `--out` 配下の `<アカウント>/` に、記事 `.md`、サイドカー `.note.json`、画像 `<タイトル>-img/`、`.note-channel.json` を出力する。
 - 既存ファイルは `--force` を付けない限り上書きしない。
-- タイトルが空・重複する記事は `--rename "<guid>=<新タイトル>"` で解決する。
+- タイトルが空の記事は `無題 (YYYY-MM-DD <guid 先頭6文字>)`、重複する記事は末尾に ` (<guid 先頭6文字>)` を付けて自動的に命名する（手作業は不要）。`--rename "<guid>=<新タイトル>"` で個別に上書きできる。
 - 情報が失われる変換は失敗する。警告に下げるには `--allow-lossy` を付ける。
 - `--against <posts dir>` は書き出さずに差分だけを報告する（`--out` とは併用不可）。手で取り込んだ原稿と `platform_post_id` で照合し、プロパティと本文の差分を出す。posts 側には一切書き込まない。
 - 仕様は [docs/specification.md](docs/specification.md) を参照。
