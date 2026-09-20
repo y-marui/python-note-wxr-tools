@@ -14,3 +14,7 @@
 - `--allow-lossy` on both converters: downgrade a missing image, an unresolved image URL, a guid collision or an unrepresentable item field to warnings recorded in the manifest.
 - `note-wxr-validate <dir>`: check required properties, image references, sidecar hashes and that `manifest.json` matches the files on disk.
 - Round-trip tests on synthetic fixtures, and a local-only `make test-realdata` that round-trips a real export named by `NOTE_WXR_REALDATA_ZIP`.
+
+### Fixed
+
+- `note-wxr-validate` (and so `note-md-to-wxr`) no longer treats `README.md` or hidden Markdown files in the account folder as manuscripts.
