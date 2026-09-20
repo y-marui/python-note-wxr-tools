@@ -74,6 +74,12 @@ posts directory without manual merging. Articles are matched to manuscripts
   its sidecar and images are overwritten in place; the existing file name is
   kept, and front matter properties the export does not define (such as
   `editorial_note`, including multi-line values) are copied back.
+- Matched and different, but the existing manuscript has
+  `publication_status: needs_update` (local edits not on note yet): never
+  overwritten, even with `--force`. It is listed as `kept (needs_update)` in
+  the summary and does not affect the exit code. `--overwrite-needs-update`
+  lifts this protection, after which the manuscript follows the rule above
+  (overwritten only with `--force`).
 - Files that exist only in the posts directory are never deleted.
 - A new article whose file name is already taken by another file fails, and
   nothing is written (use `--rename`).

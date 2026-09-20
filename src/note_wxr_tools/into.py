@@ -11,6 +11,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from note_wxr_tools import against
+from note_wxr_tools.frontmatter import FrontMatterError, parse
 
 
 @dataclass
@@ -21,6 +22,7 @@ class IntoSummary:
     overwritten: list[str] = field(default_factory=list)
     unchanged: int = 0
     pending: list[against.Difference] = field(default_factory=list)
+    kept: list[str] = field(default_factory=list)
     channel: str = "unchanged"
 
 
@@ -108,8 +110,14 @@ def apply(
     comparison: against.Comparison,
     matched: set[str],
     force: bool,
+    overwrite_needs_update: bool = False,
 ) -> IntoSummary:
-    """Write new articles, and differing ones only with ``force``."""
+    """Write new articles, and differing ones only with ``force``.
+
+    A differing manuscript with ``publication_status: needs_update`` holds
+    edits that are not on note yet, so it is kept as is (even with ``force``)
+    unless ``overwrite_needs_update`` is set.
+    """
     differing = {d.guid: d for d in comparison.differences}
     summary = IntoSummary()
     for guid, paths in article_files.items():
@@ -119,6 +127,8 @@ def apply(
             summary.created.append(manuscript.stem)
         elif guid not in differing:
             summary.unchanged += 1
+        elif not overwrite_needs_update and _needs_update(manuscript):
+            summary.kept.append(manuscript.stem)
         elif force:
             existing = manuscript.read_text(encoding="utf-8")
             generated = files[manuscript].decode("utf-8")
@@ -128,6 +138,14 @@ def apply(
         else:
             summary.pending.append(differing[guid])
     return summary
+
+
+def _needs_update(manuscript: Path) -> bool:
+    try:
+        props, _ = parse(manuscript.read_text(encoding="utf-8"))
+    except (FrontMatterError, OSError, UnicodeDecodeError):
+        return False
+    return props.get("publication_status") == "needs_update"
 
 
 def _write(files: dict[Path, bytes], paths: list[Path]) -> None:
