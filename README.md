@@ -31,7 +31,7 @@ uv run note-wxr-to-md <export.zip|dir> --out <dir>
 
 - Writes articles (`.md`), sidecars (`.note.json`), images (`<title>-img/`) and `.note-channel.json` under `<account>/` in `--out`.
 - Existing files are never overwritten unless `--force` is given.
-- Resolve empty or duplicate titles with `--rename "<guid>=<new title>"`.
+- Empty titles become `無題 (YYYY-MM-DD <guid prefix>)` and duplicate titles get ` (<guid prefix>)` appended, so no manual step is needed. Override any title with `--rename "<guid>=<new title>"`.
 - Lossy conversions fail; `--allow-lossy` downgrades them to warnings.
 - `--against <posts dir>` only reports differences and writes nothing (not combinable with `--out`). It matches manuscripts you imported by hand by `platform_post_id` and lists property and body differences; the posts directory is never written.
 - See [docs/specification.md](docs/specification.md) for the specification.

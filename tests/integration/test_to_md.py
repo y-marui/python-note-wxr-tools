@@ -101,7 +101,32 @@ def test_convert_never_overwrites_without_force(
     convert(export, out, force=True)
 
 
-def test_convert_rejects_empty_and_duplicate_titles_unless_renamed(
+def test_convert_names_empty_and_duplicate_titles_deterministically(
+    make_export: MakeExport, tmp_path: Path
+) -> None:
+    export = make_export(
+        [
+            make_item(guid="n8bd10abc", title=""),
+            make_item(guid="n2aaaaaa", title="Same"),
+            make_item(guid="n3bbbbbb", title="Same"),
+            make_item(guid="n4", title="Unique"),
+        ]
+    )
+    convert(export, tmp_path / "a")
+    convert(export, tmp_path / "b")
+    names = sorted(p.name for p in _folder(tmp_path / "a").glob("*.md"))
+    assert names == [
+        "Same (n2aaaa).md",
+        "Same (n3bbbb).md",
+        "Unique.md",
+        "無題 (2019-09-04 n8bd10).md",
+    ]
+    assert names == sorted(p.name for p in _folder(tmp_path / "b").glob("*.md"))
+    text = (_folder(tmp_path / "a") / "無題 (2019-09-04 n8bd10).md").read_text("utf-8")
+    assert 'title: "無題 (2019-09-04 n8bd10)"' in text
+
+
+def test_convert_rename_overrides_automatic_names(
     make_export: MakeExport, tmp_path: Path
 ) -> None:
     export = make_export(
@@ -111,15 +136,21 @@ def test_convert_rejects_empty_and_duplicate_titles_unless_renamed(
             make_item(guid="n3", title="Same"),
         ]
     )
-    with pytest.raises(ConversionError) as error:
-        convert(export, tmp_path / "bad")
-    assert "n1" in str(error.value) and "duplicate" in str(error.value)
-
     convert(export, tmp_path / "ok", renames={"n1": "One", "n3": "Three"})
-    assert (_folder(tmp_path / "ok") / "Three.md").exists()
-    assert 'title: "Three"' in (_folder(tmp_path / "ok") / "Three.md").read_text(
-        "utf-8"
+    folder = _folder(tmp_path / "ok")
+    assert (folder / "One.md").exists()
+    assert (folder / "Three.md").exists()
+    assert 'title: "Three"' in (folder / "Three.md").read_text("utf-8")
+
+
+def test_convert_rejects_names_that_still_collide(
+    make_export: MakeExport, tmp_path: Path
+) -> None:
+    export = make_export(
+        [make_item(guid="n1", title="A"), make_item(guid="n2", title="Other")]
     )
+    with pytest.raises(ConversionError, match="duplicate title"):
+        convert(export, tmp_path / "bad", renames={"n1": "Other"})
 
 
 def test_convert_rejects_rename_for_unknown_guid(
@@ -198,7 +229,7 @@ def test_iso_datetime_negative_offset() -> None:
 def test_main_reports_errors_with_exit_code_1(
     make_export: MakeExport, tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
-    export = str(make_export([make_item(title="")]))
+    export = str(make_export([make_item(title=".")]))
     assert main([export, "--out", str(tmp_path / "o")]) == 1
     assert "--rename" in capsys.readouterr().err
 

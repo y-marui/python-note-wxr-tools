@@ -11,6 +11,7 @@ from pathlib import Path
 
 import pytest
 
+from note_wxr_tools.frontmatter import parse as parse_front_matter
 from note_wxr_tools.to_md import convert as to_md
 from note_wxr_tools.to_wxr import convert as to_wxr
 from note_wxr_tools.validate import validate
@@ -27,24 +28,25 @@ def export_zip() -> Path:
     return Path(value)
 
 
-def _renames(export_zip: Path) -> dict[str, str]:
-    """Give every empty or duplicate title a unique placeholder."""
-    items = parse(Source(export_zip).read_xml()).items
-    seen: set[str] = set()
-    renames = {}
-    for item in items:
-        title, guid = item.fields["title"], item.fields["guid"]
-        if not title.strip() or title in seen:
-            renames[guid] = f"untitled-{guid}"
-        seen.add(title)
-    return renames
+def _generated_titles(export_zip: Path, folder: Path) -> dict[str, str]:
+    """Map each generated title to the original one it replaced."""
+    originals = {
+        item.fields["guid"]: item.fields["title"]
+        for item in parse(Source(export_zip).read_xml()).items
+    }
+    changed = {}
+    for path in folder.glob("*.md"):
+        props, _ = parse_front_matter(path.read_text(encoding="utf-8"))
+        original = originals[props["platform_post_id"]]
+        if props["title"] != original:
+            changed[props["title"]] = original
+    return changed
 
 
 def test_real_export_round_trips_byte_for_byte(
     export_zip: Path, tmp_path: Path
 ) -> None:
-    renames = _renames(export_zip)
-    to_md(export_zip, tmp_path / "md", allow_lossy=True, renames=renames)
+    to_md(export_zip, tmp_path / "md", allow_lossy=True)
     folder = next((tmp_path / "md").iterdir())
     assert validate(folder).errors == []
 
@@ -57,9 +59,11 @@ def test_real_export_round_trips_byte_for_byte(
         xml_name = next(n for n in original.namelist() if n.endswith(".xml"))
         expected = original.read(xml_name).decode("utf-8")
         actual = rebuilt.read(xml_name).decode("utf-8")
-        for placeholder in renames.values():
-            # Renamed titles are the only intended difference.
-            actual = actual.replace(f"<![CDATA[{placeholder}]]>", "<![CDATA[]]>", 1)
+        for generated, title in _generated_titles(export_zip, folder).items():
+            # Automatically named titles are the only intended difference.
+            actual = actual.replace(
+                f"<![CDATA[{generated}]]>", f"<![CDATA[{title}]]>", 1
+            )
         assert actual == expected
         for name in original.namelist():
             if name.startswith("assets/") and not name.endswith("/"):

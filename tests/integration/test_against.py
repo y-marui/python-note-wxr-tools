@@ -131,7 +131,10 @@ def test_against_tolerates_untitled_articles_and_rejects_bad_directories(
 
     comparison = convert(export, against_dir=empty).comparison
     assert comparison is not None
-    assert comparison.new_in_export == ["untitled-n1 (n1)", "untitled-n2 (n2)"]
+    assert comparison.new_in_export == [
+        "無題 (2019-09-04 n1) (n1)",
+        "無題 (2019-09-04 n2) (n2)",
+    ]
 
     with pytest.raises(ConversionError, match="not a directory"):
         convert(export, against_dir=tmp_path / "missing")

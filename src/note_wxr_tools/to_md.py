@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import json
 import sys
+from collections import Counter
 from collections.abc import Sequence
 from dataclasses import dataclass, field
 from datetime import datetime
@@ -17,6 +18,8 @@ from note_wxr_tools.wxr import ASSETS_PREFIX, Export, ExportError, Item, Source,
 
 PLATFORM = "note"
 ORIGIN = "note.com export"
+UNTITLED = "無題"
+GUID_PREFIX = 6
 STATUSES = {"publish": "published", "draft": "draft"}
 FILENAME_MAP = str.maketrans(
     {c: chr(ord(c) + 0xFEE0) for c in '/:*?"<>|'} | {"\\": "＼"}
@@ -114,9 +117,7 @@ class _Converter:
         out: Path,
         allow_lossy: bool,
         renames: dict[str, str],
-        lenient_titles: bool = False,
     ) -> None:
-        self.lenient_titles = lenient_titles
         self.source = source
         self.export = export
         self.allow_lossy = allow_lossy
@@ -157,14 +158,15 @@ class _Converter:
 
     def _stems(self) -> list[str | None]:
         """Filename stem per item (None when it cannot be determined)."""
+        titles = [self._title(item) for item in self.export.items]
+        counts = Counter(t for t, explicit in titles if not explicit)
         stems: list[str | None] = []
         seen: dict[str, str] = {}
-        for item in self.export.items:
+        for item, (title, explicit) in zip(self.export.items, titles, strict=True):
             guid = item.fields.get("guid", "")
-            title = self.renames.get(guid, item.fields.get("title", ""))
+            if not explicit and counts[title] > 1:
+                title = f"{title} ({guid[:GUID_PREFIX]})"
             stem = sanitize_filename(title)
-            if self.lenient_titles and (not stem or stem in seen):
-                stem = f"untitled-{guid}"
             if not stem or stem in (".", ".."):
                 self.plan.errors.append(
                     f"empty or unusable title for {guid}"
@@ -182,6 +184,22 @@ class _Converter:
             seen[stem] = guid
             stems.append(stem)
         return stems
+
+    def _title(self, item: Item) -> tuple[str, bool]:
+        """Return the title and whether ``--rename`` set it explicitly.
+
+        Empty titles get a placeholder derived from the creation date and guid,
+        so re-running the import gives the same filename.
+        """
+        guid = item.fields.get("guid", "")
+        if guid in self.renames:
+            return self.renames[guid], True
+        title = sanitize_filename(item.fields.get("title", ""))
+        if title:
+            return title, False
+        date = item.fields.get("wp:post_date", "")[:10]
+        label = f"{date} {guid[:GUID_PREFIX]}".strip()
+        return f"{UNTITLED} ({label})", True
 
     def _article(self, item: Item, stem: str) -> None:
         fields = item.fields
@@ -332,7 +350,6 @@ def convert(
         out or Path("."),
         allow_lossy,
         renames or {},
-        lenient_titles=against_dir is not None,
     ).run()
     if against_dir is not None:
         if plan.errors:
