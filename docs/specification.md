@@ -190,7 +190,10 @@ contains a blank line, so `note-md-to-wxr` can split the body back into
 blocks. Only these elements become Markdown: `h1`-`h6`, `p`, `ul`/`ol`
 (nested), `blockquote` of paragraphs, `hr`, `pre`, `img` and a `figure` that
 holds only an image with an empty caption, plus inline `strong`/`b`,
-`em`/`i`, `code`, `a` and `br`. Any other block, or an empty one, is kept as
+`em`/`i`, `code`, `a` and `br`. A list item holds inline text, or exactly one
+`p` (as note writes it) with optional nested lists; an item with several
+paragraphs, other block elements or no text keeps the whole list as raw HTML.
+Any other block, or an empty one, is kept as
 raw HTML (blank lines inside it are removed) and reported as a warning.
 Attributes such as `name` are not kept in Markdown; the sidecar keeps them.
 

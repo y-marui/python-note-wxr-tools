@@ -263,14 +263,28 @@ def _list(node: Node, resolve_image: ImageResolver) -> list[str]:
         number += 1
         marker = f"{number}. " if ordered else "- "
         indent = " " * len(marker)
-        inline = [c for c in child.children if not _is_list(c)]
+        inline = _item_inline(child)
         nested = [c for c in child.children if _is_list(c)]
         text = _inline(inline, resolve_image, strip=True)
+        if not text:
+            raise Unsupported("empty list item")
         lines.append(marker + text.replace("\n", "\n" + indent))
         for sub in nested:
             assert isinstance(sub, Node)
             lines.extend(indent + line for line in _list(sub, resolve_image))
     return lines
+
+
+def _item_inline(item: Node) -> list[Node | str]:
+    """Return the inline content of ``item``, unwrapping a single ``<p>``."""
+    rest = [c for c in item.children if not _is_list(c)]
+    paragraphs = [c for c in rest if isinstance(c, Node) and c.tag == "p"]
+    if not paragraphs:
+        return rest
+    others = [c for c in rest if c is not paragraphs[0]]
+    if len(paragraphs) > 1 or any(not isinstance(c, str) or c.strip() for c in others):
+        raise Unsupported("list item paragraphs")
+    return paragraphs[0].children
 
 
 def _is_list(child: Node | str) -> bool:
