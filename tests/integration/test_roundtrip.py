@@ -15,6 +15,7 @@ from tests.factory import (
     REALISTIC_ASSETS,
     REALISTIC_BODY,
     WXR,
+    make_item,
     realistic_items,
 )
 
@@ -91,3 +92,35 @@ def test_editing_one_block_regenerates_only_that_block(
     assert report.regenerated_blocks == 1
     assert content.startswith(before) and content.endswith(after)
     assert "edited" in content[len(before) : len(content) - len(after)]
+
+
+LIST_BODY = (
+    "<p>intro</p>\n"
+    "<ul><li><p>a <strong>b</strong></p><ul><li><p>nested</p></li></ul></li>"
+    '<li><p><a href="https://e.com">link</a></p></li></ul>\n'
+    "<ol><li><p>x</p></li><li><p>y</p></li></ol>"
+)
+
+
+def test_paragraph_lists_become_markdown_and_round_trip(
+    make_export: MakeExport, tmp_path: Path
+) -> None:
+    export = make_export([make_item(body=LIST_BODY)])
+    to_md(export, tmp_path / "md")
+    md = tmp_path / "md" / "acct-x" / "Title.md"
+    text = md.read_text("utf-8")
+    assert "- a **b**\n  - nested\n- [link](https://e.com)" in text
+    assert "<ul>" not in text
+
+    report = to_wxr([md], tmp_path / "wxr")
+    assert report.regenerated_blocks == 0
+    assert _content(report.zip_path) == LIST_BODY
+
+    md.write_text(text.replace("- [link]", "- edited [link]"), "utf-8")
+    edited = to_wxr([md], tmp_path / "wxr2")
+    assert edited.regenerated_blocks == 1
+    content = _content(edited.zip_path)
+    assert content.startswith("<p>intro</p><ul>") and content.endswith(
+        "\n<ol>" + LIST_BODY.split("<ol>")[1]
+    )
+    assert "edited" in content

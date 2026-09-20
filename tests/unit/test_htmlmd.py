@@ -41,6 +41,36 @@ def test_convert_body_nested_lists() -> None:
     assert _md(body) == ["- a\n  - b\n- c", "1. x"]
 
 
+def test_convert_body_lists_with_paragraph_items() -> None:
+    body = (
+        '<ul name="u"><li name="i"><p name="p">a <strong>b</strong></p></li>'
+        '<li><p>see <a href="https://e.com">e</a></p>'
+        "<ul><li><p>nested</p></li></ul></li></ul>"
+        "<ol><li><p>x</p></li><li><p>y</p></li></ol>"
+    )
+    blocks = convert_body(body, lambda src: src)
+    assert [b.markdown for b in blocks] == [
+        "- a **b**\n- see [e](https://e.com)\n  - nested",
+        "1. x\n2. y",
+    ]
+    assert not any(b.raw for b in blocks)
+
+
+@pytest.mark.parametrize(
+    "body",
+    [
+        "<ul><li><p>a</p><p>b</p></li></ul>",
+        "<ul><li><p>a</p>loose</li></ul>",
+        "<ul><li><p></p></li></ul>",
+        "<ul><li><blockquote>a</blockquote></li></ul>",
+    ],
+)
+def test_convert_body_keeps_complex_lists_raw(body: str) -> None:
+    blocks = convert_body(body, lambda src: src)
+    assert [b.raw for b in blocks] == [True]
+    assert blocks[0].html == body
+
+
 def test_convert_body_blockquote_and_hr() -> None:
     body = "<blockquote><p>a</p><p>b<br>c</p></blockquote><hr>"
     assert _md(body) == ["> a\n>\n> b\\\n> c", "---"]

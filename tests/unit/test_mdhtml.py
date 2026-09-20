@@ -67,6 +67,8 @@ def test_block_to_html_converts_supported_markdown(
         '<p><a href="https://e.com/a">site</a> <a href="https://e.com/b">https://e.com/b</a></p>',
         "<p>1. a * b _c_ [d] &amp;amp; &lt;tag&gt; `x`</p>",
         "<ul><li>a<ul><li>b</li><li>c</li></ul></li><li>d</li></ul><ol><li>x</li></ol>",
+        "<ul><li><p>a <strong>b</strong></p><ul><li><p>c</p></li></ul></li></ul>",
+        '<ol><li><p>x <a href="https://e.com">e</a></p></li></ol>',
         "<blockquote><p>a</p><p>b<br>c</p></blockquote><hr>",
         "<pre>a\n\nb</pre>",
         '<figure><img src="/assets/a.png" alt="x [y]">'
