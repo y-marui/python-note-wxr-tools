@@ -166,6 +166,46 @@ def test_into_force_overwrites_and_keeps_extra_properties(
     assert 'origin: "note.com export"' in result
 
 
+def _mark_needs_update(posts: Path) -> Path:
+    draft = posts / "acct-x" / "Draft.md"
+    text = draft.read_text("utf-8").replace("Draft text", "Local edit")
+    text = re.sub(
+        r'publication_status: "\w+"', 'publication_status: "needs_update"', text
+    )
+    draft.write_text(text, "utf-8")
+    return draft
+
+
+def test_into_keeps_needs_update_manuscripts_even_with_force(
+    export: Path, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    posts = _hand_imported(export, tmp_path)
+    _mark_needs_update(posts)
+    before = _snapshot(posts)
+
+    assert main([str(export), "--into", str(posts), "--force"]) == 0
+    out = capsys.readouterr().out
+    assert "kept (needs_update): Draft" in out
+    assert _snapshot(posts) == before
+
+    assert main([str(export), "--into", str(posts)]) == 0
+    assert _snapshot(posts) == before
+
+
+def test_into_overwrites_needs_update_only_with_explicit_flag(
+    export: Path, tmp_path: Path
+) -> None:
+    posts = _hand_imported(export, tmp_path)
+    draft = _mark_needs_update(posts)
+
+    summary = convert(
+        export, into_dir=posts, force=True, overwrite_needs_update=True
+    ).into
+    assert summary is not None
+    assert (summary.kept, summary.overwritten) == ([], ["Draft"])
+    assert "Local edit" not in draft.read_text("utf-8")
+
+
 def test_into_never_deletes_files_only_in_posts(export: Path, tmp_path: Path) -> None:
     posts = _hand_imported(export, tmp_path)
     keep = posts / "acct-x" / "Mine.md"

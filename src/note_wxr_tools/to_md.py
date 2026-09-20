@@ -349,6 +349,7 @@ def convert(
     out: Path | None = None,
     *,
     force: bool = False,
+    overwrite_needs_update: bool = False,
     allow_lossy: bool = False,
     renames: dict[str, str] | None = None,
     against_dir: Path | None = None,
@@ -377,7 +378,9 @@ def convert(
         placements,
     ).run()
     if into_dir is not None:
-        return _convert_into(plan, into_dir, set(placements), force)
+        return _convert_into(
+            plan, into_dir, set(placements), force, overwrite_needs_update
+        )
     if against_dir is not None:
         if plan.errors:
             raise ConversionError("\n".join(plan.errors))
@@ -400,7 +403,13 @@ def convert(
     return plan.report
 
 
-def _convert_into(plan: _Plan, posts: Path, matched: set[str], force: bool) -> Report:
+def _convert_into(
+    plan: _Plan,
+    posts: Path,
+    matched: set[str],
+    force: bool,
+    overwrite_needs_update: bool,
+) -> Report:
     """Add new articles to ``posts``; overwrite differing ones only with ``force``.
 
     The manifest describes a whole export, so it is not written into an
@@ -419,7 +428,12 @@ def _convert_into(plan: _Plan, posts: Path, matched: set[str], force: bool) -> R
     except ValueError as error:
         raise ConversionError(str(error)) from error
     plan.report.into = into.apply(
-        plan.files, plan.article_files, comparison, matched, force
+        plan.files,
+        plan.article_files,
+        comparison,
+        matched,
+        force,
+        overwrite_needs_update,
     )
     plan.report.into.channel = state
     if channel is not None:
@@ -463,6 +477,12 @@ def main(argv: Sequence[str] | None = None) -> int:
         help="overwrite existing files (with --into: differing manuscripts)",
     )
     parser.add_argument(
+        "--overwrite-needs-update",
+        action="store_true",
+        help="with --into: also overwrite manuscripts whose publication_status "
+        "is needs_update (kept by default, even with --force)",
+    )
+    parser.add_argument(
         "--allow-lossy",
         action="store_true",
         help="downgrade lossy failures to warnings",
@@ -485,6 +505,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             against_dir=args.against,
             into_dir=args.into,
             force=args.force,
+            overwrite_needs_update=args.overwrite_needs_update,
             allow_lossy=args.allow_lossy,
             renames=dict(args.rename),
         )
@@ -508,8 +529,10 @@ def _print_into(summary: into.IntoSummary) -> int:
     print(
         f"created {len(summary.created)}, overwritten {len(summary.overwritten)}, "
         f"unchanged {summary.unchanged}, differing {len(summary.pending)}, "
-        f"channel {summary.channel}"
+        f"kept (needs_update) {len(summary.kept)}, channel {summary.channel}"
     )
+    for title in summary.kept:
+        print(f"kept (needs_update): {title}")
     if not summary.pending:
         return 0
     print("\n".join(against.format_differences(summary.pending)))
