@@ -32,7 +32,11 @@ def _content(zip_path: Path) -> str:
 
 @pytest.fixture
 def account_folder(make_export: MakeExport, tmp_path: Path) -> Path:
-    to_md(make_export(realistic_items(), REALISTIC_ASSETS), tmp_path / "md")
+    to_md(
+        make_export(realistic_items(), REALISTIC_ASSETS),
+        tmp_path / "md",
+        with_sidecar=True,
+    )
     return tmp_path / "md" / "acct-x"
 
 
@@ -106,7 +110,7 @@ def test_paragraph_lists_become_markdown_and_round_trip(
     make_export: MakeExport, tmp_path: Path
 ) -> None:
     export = make_export([make_item(body=LIST_BODY)])
-    to_md(export, tmp_path / "md")
+    to_md(export, tmp_path / "md", with_sidecar=True)
     md = tmp_path / "md" / "acct-x" / "Title.md"
     text = md.read_text("utf-8")
     assert "- a **b**\n  - nested\n- [link](https://e.com)" in text

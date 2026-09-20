@@ -36,6 +36,20 @@ ITEM_LAYOUT = (
     ("wp:post_password", True),
     ("wp:is_sticky", False),
 )
+# Item fields that had the same value in every real export; used when there
+# is no sidecar to say otherwise (``wp:post_name`` is not constant; it is left empty).
+ITEM_DEFAULTS = {
+    "wp:post_type": "post",
+    "wp:post_parent": "0",
+    "wp:menu_order": "0",
+    "wp:is_sticky": "0",
+    "wp:comment_status": "open",
+    "wp:ping_status": "open",
+    "wp:post_password": "",
+    "wp:post_name": "",
+    "excerpt:encoded": "",
+    "description": "",
+}
 PLAIN_AUTHOR_FIELDS = frozenset({"wp:author_id"})
 GUID_OPEN = '<guid isPermaLink="false">'
 

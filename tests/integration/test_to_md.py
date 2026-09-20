@@ -19,7 +19,7 @@ def test_convert_writes_manuscript_sidecar_and_channel(
     make_export: MakeExport, tmp_path: Path
 ) -> None:
     out = tmp_path / "out"
-    report = convert(make_export([make_item()]), out)
+    report = convert(make_export([make_item()]), out, with_sidecar=True)
 
     assert (report.articles, report.images) == (1, 0)
     text = (_folder(out) / "Title.md").read_text(encoding="utf-8")
@@ -47,7 +47,7 @@ def test_convert_sidecar_reassembles_original_body(
 ) -> None:
     body = '<h2 name="a">Head</h2>\n<p name="b">x<br></p><figure><a></a></figure>'
     out = tmp_path / "out"
-    convert(make_export([make_item(body=body)]), out)
+    convert(make_export([make_item(body=body)]), out, with_sidecar=True)
 
     sidecar = json.loads((_folder(out) / "Title.note.json").read_text("utf-8"))
     assert "".join(b["html"] for b in sidecar["blocks"]) == body
@@ -252,8 +252,11 @@ def test_convert_writes_manifest(make_export: MakeExport, tmp_path: Path) -> Non
     assert data["allow_lossy"] is True
     assert (data["article_count"], data["image_count"], data["total_size"]) == (2, 1, 3)
     assert [a["guid"] for a in data["articles"]] == ["n1", "n2"]
+    manuscript = (_folder(out) / "Title.md").read_text("utf-8")
+    manuscript_body = manuscript.split("\n---\n", 1)[1].lstrip("\n")
     assert (
-        data["articles"][0]["body_sha256"] == hashlib.sha256(body.encode()).hexdigest()
+        data["articles"][0]["body_sha256"]
+        == hashlib.sha256(manuscript_body.encode()).hexdigest()
     )
     paths = {i["path"] for i in data["inputs"]}
     assert paths == {"note-acct_x-1.xml", "assets/a.png"}

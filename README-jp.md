@@ -29,12 +29,13 @@ note のエクスポート（ZIP または展開済みディレクトリ）を M
 uv run note-wxr-to-md <export.zip|dir> --out <dir>
 ```
 
-- `--out` 配下の `<アカウント>/` に、記事 `.md`、サイドカー `.note.json`、画像 `<タイトル>-img/`、`.note-channel.json` を出力する。
+- `--out` 配下の `<アカウント>/` に、記事 `.md`、画像 `<タイトル>-img/`、`.note-channel.json` を出力する。元のタイトルがファイル名用のタイトルと異なる場合は、プロパティ `note_title` に元のタイトルを残す。
+- `--with-sidecar` を付けると `<タイトル>.note.json`（元のブロック HTML と item フィールド）も出力する。`note-md-to-wxr` は存在すればこれを使い、無ければ front matter と Markdown から WXR を組み立てる。
 - 既存ファイルは `--force` を付けない限り上書きしない。
 - タイトルが空の記事は `無題 (YYYY-MM-DD <guid 先頭6文字>)`、重複する記事は末尾に ` (<guid 先頭6文字>)` を付けて自動的に命名する（手作業は不要）。`--rename "<guid>=<新タイトル>"` で個別に上書きできる。
 - 情報が失われる変換は失敗する。警告に下げるには `--allow-lossy` を付ける。
 - `--against <posts dir>` は書き出さずに差分だけを報告する（`--out` とは併用不可）。手で取り込んだ原稿と `platform_post_id` で照合し、プロパティと本文の差分を出す。posts 側には一切書き込まない。
-- `--into <posts dir>` は既存の posts ディレクトリに新規記事を追加する（`--out`・`--against` とは併用不可）。`platform_post_id` で一致し変更のない記事はスキップし、差分のある記事は `--against` と同じ差分を報告して何も書かず終了コード 1 で終わる。`--force` を付けると `editorial_note` などの追加プロパティを残したまま上書きする。`publication_status: needs_update` の原稿は `--force` を付けても上書きしない（`kept (needs_update)` として報告し、終了コードには影響しない）。`--overwrite-needs-update` でこの保護を解除できる。posts 側にしかないファイルは削除しない。変更のない記事・`kept (needs_update)` の記事に欠けているサイドカーと画像は書き出し（既存のサイドカーは `--force` のときだけ置き換え、原稿には触れない）、`<アカウント>/manifest.json` は常に最新に保つため、`note-wxr-validate` と `note-md-to-wxr` がそのフォルダを受け付ける。`<アカウント>/.note-channel.json` は無ければ作成し、あれば新しい guid を追加する形で更新する（何も削除しない）ため、`note-md-to-wxr` で再エクスポートできる。
+- `--into <posts dir>` は既存の posts ディレクトリに新規記事を追加する（`--out`・`--against` とは併用不可）。`platform_post_id` で一致し変更のない記事はスキップし、差分のある記事は `--against` と同じ差分を報告して何も書かず終了コード 1 で終わる。`--force` を付けると `editorial_note` などの追加プロパティを残したまま上書きする。`publication_status: needs_update` の原稿は `--force` を付けても上書きしない（`kept (needs_update)` として報告し、終了コードには影響しない）。`--overwrite-needs-update` でこの保護を解除できる。posts 側にしかないファイルは削除しない。変更のない記事・`kept (needs_update)` の記事に欠けている画像は書き出し（`--with-sidecar` の場合は欠けているサイドカーも。既存のサイドカーは `--force` のときだけ置き換え、原稿には触れない）、`<アカウント>/manifest.json` は常に最新に保つため、`note-wxr-validate` と `note-md-to-wxr` がそのフォルダを受け付ける。`<アカウント>/.note-channel.json` は無ければ作成し、あれば新しい guid を追加する形で更新する（何も削除しない）ため、`note-md-to-wxr` で再エクスポートできる。
 - 仕様は [docs/specification.md](docs/specification.md) を参照。
 
 ### note-wxr-validate
@@ -45,7 +46,7 @@ uv run note-wxr-to-md <export.zip|dir> --out <dir>
 uv run note-wxr-validate <dir>
 ```
 
-- 必須プロパティ、画像の参照先、サイドカーのハッシュ、`manifest.json` とディスクの一致を確認する。
+- 必須プロパティ、画像の参照先、（存在すれば）サイドカーのハッシュを確認する。`manifest.json` があればそれも確認する（記事ごとの差異は警告）。
 - フォルダ内の `README.md` と隠しファイルは原稿として扱わない。
 - `note-wxr-to-md` は同じフォルダに `manifest.json` を書き出す。
 
@@ -58,6 +59,7 @@ uv run note-md-to-wxr <article.md>... --out <dir>
 ```
 
 - 先に validator を実行し、失敗したら何も書かない。
+- 各 item を front matter、Markdown 本文、`.note-channel.json` から組み立てる（`platform_created_at` 順に並べ、`post_id` は順に採番）。`<タイトル>.note.json` があれば従来どおり使う。`platform_post_id` を持たない記事（Obsidian で作成したもの）には、安定した guid を生成する。
 - 編集していないブロックは元の HTML を再利用し、編集したブロックだけ Markdown から再生成する。
 - `--out` に `note-<アカウント>-1.zip` と `manifest.json` を出力する。既存ファイルは `--force` なしでは上書きしない。
 - `--image-map <map.json>` で `/assets/` の参照を公開 HTTPS URL に置き換える（`{"<ファイル名>": "https://..."}`）。未マップの画像があればエラー。この出力は元のエクスポートと byte 一致しない。

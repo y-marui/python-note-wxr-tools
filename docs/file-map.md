@@ -33,7 +33,7 @@ src/note_wxr_tools/
     - used by: to_md, validate, into
   frontmatter.py
     - imports: (標準ライブラリのみ)
-    - used by: validate, into
+    - used by: validate, into, to_wxr
   to_md.py
     - imports: wxr, htmlmd, manifest, frontmatter, against, into
     - used by: CLI エントリポイント `note-wxr-to-md`
@@ -44,7 +44,7 @@ src/note_wxr_tools/
     - imports: frontmatter
     - used by: to_md, into
   into.py
-    - imports: against, frontmatter, manifest
+    - imports: against, frontmatter, htmlmd, manifest
     - used by: to_md
   mdhtml.py
     - imports: htmlmd

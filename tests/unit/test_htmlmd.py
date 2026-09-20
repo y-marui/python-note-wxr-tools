@@ -118,3 +118,21 @@ def test_convert_body_records_original_html_and_hash() -> None:
 @pytest.mark.parametrize("text", ["loose text"])
 def test_convert_body_loose_text_becomes_block(text: str) -> None:
     assert _md(f"<p>a</p>{text}") == ["a", text]
+
+
+@pytest.mark.parametrize(
+    ("body", "expected"),
+    [
+        ("<p><b>a<br></b>&nbsp;b</p>", "**a**\\\n\xa0b"),
+        ("<p>x<b><br>a</b></p>", "x\\\n**a**"),
+        ("<p>x <b>a<br>b</b></p>", "x **a\\\nb**"),
+        ("<p>x<i>a<br></i>y</p>", "x*a*\\\ny"),
+        ("<p>x<b><i>a<br></i></b>y</p>", "x***a***\\\ny"),
+        ("<p>x<b><br></b>y</p>", "x\\\ny"),
+        ("<ul><li><p><b>a<br></b> b</p></li></ul>", "- **a**\\\n  b"),
+    ],
+)
+def test_convert_body_emphasis_with_break_keeps_markers_balanced(
+    body: str, expected: str
+) -> None:
+    assert _md(body) == [expected]

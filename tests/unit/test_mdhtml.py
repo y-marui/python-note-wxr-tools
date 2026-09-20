@@ -1,3 +1,4 @@
+import re
 from urllib.parse import unquote
 
 import pytest
@@ -88,3 +89,21 @@ def test_html_to_markdown_to_html_to_markdown_is_stable(source: str) -> None:
     first = to_markdown(source)
     regenerated = "".join(block_to_html(m, identity) for m in first)
     assert to_markdown(regenerated) == first
+
+
+@pytest.mark.parametrize(
+    "body",
+    [
+        "<p><b>a<br></b>&nbsp;b</p>",
+        "<p>x<b><br>a</b></p>",
+        "<p>x <b>a<br>b</b></p>",
+        "<p>x<i>a<br></i>y</p>",
+        "<ul><li><b>a<br></b> b<ul><li><i>c<br></i> d</li></ul></li></ul>",
+    ],
+)
+def test_emphasis_with_break_survives_markdown_round_trip(body: str) -> None:
+    [block] = convert_body(body, lambda src: src)
+    regenerated = block_to_html(block.markdown, lambda src: src)
+    [again] = convert_body(regenerated, lambda src: src)
+    assert again.markdown == block.markdown
+    assert "*" not in re.sub(r"<[^>]+>", "", regenerated)

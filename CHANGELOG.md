@@ -15,7 +15,15 @@
 - `note-wxr-validate <dir>`: check required properties, image references, sidecar hashes and that `manifest.json` matches the files on disk.
 - Round-trip tests on synthetic fixtures, and a local-only `make test-realdata` that round-trips a real export named by `NOTE_WXR_REALDATA_ZIP`.
 
+### Changed
+
+- Sidecars are no longer written by default. `note-md-to-wxr` builds every WXR item from the front matter, the Markdown body and `.note-channel.json` (constant item fields, dates and `link` derived from the properties, `dc:creator` from the channel title, `post_id` assigned in order, items ordered by `platform_created_at`). `--with-sidecar` on `note-wxr-to-md` keeps the old output, and an existing sidecar is still read. The byte-exact round trip now needs sidecars.
+- `note-wxr-to-md` writes a `note_title` property when the original title differs from the filename-safe title; `note-md-to-wxr` uses it as the item title.
+- `note-wxr-validate` no longer requires sidecars, a manifest or `platform_post_id` (a stable guid is generated for articles made in Obsidian). Manifest differences per article are warnings, and manifest body hashes now cover the manuscript body.
+
 ### Fixed
+
+- Bold or italic containing `<br>` at its start or end (such as `<b>text<br></b>`) no longer produces unbalanced Markdown markers; the break is moved outside the emphasis.
 
 - `note-wxr-validate` (and so `note-md-to-wxr`) no longer treats `README.md` or hidden Markdown files in the account folder as manuscripts.
 - `note-wxr-to-md --into` keeps `<account>/manifest.json` up to date, so `note-wxr-validate` and `note-md-to-wxr` accept an account imported with `--into`.

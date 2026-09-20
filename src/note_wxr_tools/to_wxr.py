@@ -12,17 +12,18 @@ from collections.abc import Sequence
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from difflib import SequenceMatcher
+from email.utils import format_datetime
 from pathlib import Path
 from urllib.parse import unquote
 
 from note_wxr_tools import manifest
-from note_wxr_tools.frontmatter import parse
+from note_wxr_tools.frontmatter import article_guid, parse
 from note_wxr_tools.htmlmd import sha256
 from note_wxr_tools.mdhtml import ImageSrc, block_to_html, split_blocks
 from note_wxr_tools.to_md import ConversionError, sanitize_filename
 from note_wxr_tools.validate import validate
 from note_wxr_tools.wxr import ASSETS_PREFIX
-from note_wxr_tools.wxrwriter import ITEM_LAYOUT, render
+from note_wxr_tools.wxrwriter import ITEM_DEFAULTS, ITEM_LAYOUT, render
 
 CHANNEL_NAME = ".note-channel.json"
 ASSET_SRC = re.compile(r'\ssrc="(/assets/[^"]*)"')
@@ -45,6 +46,7 @@ class _Options:
     """Settings shared by all articles of one run."""
 
     folder: Path
+    channel: dict[str, str]
     allow_lossy: bool = False
     image_map: dict[str, str] | None = None
     warnings: list[str] = field(default_factory=list)
@@ -56,6 +58,7 @@ class _Article:
     stem: str
     fields: dict[str, str]
     guid: str
+    body_sha256: str
     images: dict[str, bytes]
     inputs: dict[str, str]
     regenerated: int
@@ -162,20 +165,57 @@ def _apply_image_map(options: _Options, stem: str, content: str) -> str:
     return replaced
 
 
+def _sidecar_or_none(folder: Path, stem: str) -> dict[str, object] | None:
+    path = folder / f"{stem}.note.json"
+    return _read_json(path) if path.exists() else None
+
+
+def _item_fields(
+    options: _Options, props: dict[str, str], stem: str, guid: str
+) -> dict[str, str]:
+    """Return the item fields other than the body, dates and status."""
+    fields = dict(ITEM_DEFAULTS)
+    fields["title"] = props.get("note_title", stem)
+    fields["dc:creator"] = options.channel.get("title", "")
+    fields["link"] = props.get("publication_url") or (
+        f"{options.channel.get('link', '').rstrip('/')}/n/{guid}"
+    )
+    created = datetime.fromisoformat(props["platform_created_at"])
+    fields["pubDate"] = format_datetime(created)
+    return fields
+
+
+def _sidecar_fields(
+    sidecar: dict[str, object], props: dict[str, str], stem: str
+) -> dict[str, str]:
+    item: dict[str, str] = sidecar["item"]  # type: ignore[assignment]
+    fields = {tag: item.get(tag, "") for tag, _ in ITEM_LAYOUT}
+    original = item.get("title", "")
+    if "note_title" in props:
+        fields["title"] = props["note_title"]
+    else:
+        fields["title"] = original if sanitize_filename(original) == stem else stem
+    fields["link"] = props.get("publication_url") or item.get("link", "")
+    return fields
+
+
 def _article(options: _Options, path: Path) -> _Article:
     folder = options.folder
     props, body = parse(path.read_text(encoding="utf-8"))
     stem = path.stem
-    sidecar = _read_json(folder / f"{stem}.note.json")
-    item: dict[str, str] = sidecar["item"]  # type: ignore[assignment]
-    content, regenerated = _body_html(body, sidecar, _image_src(stem))
-    if not regenerated and sha256(content) != sidecar["body_sha256"]:
-        raise ConversionError(f"{stem}.md: rebuilt body differs from the original")
-    fields = {tag: item.get(tag, "") for tag, _ in ITEM_LAYOUT}
-    original = item.get("title", "")
-    fields["title"] = original if sanitize_filename(original) == stem else stem
-    fields["link"] = props.get("publication_url") or item.get("link", "")
-    fields["guid"] = props["platform_post_id"]
+    guid = article_guid(props, stem)
+    sidecar = _sidecar_or_none(folder, stem)
+    if sidecar is None:
+        blocks = split_blocks(body)
+        content = "".join(block_to_html(b, _image_src(stem)) for b in blocks)
+        regenerated = len(blocks)
+        fields = _item_fields(options, props, stem, guid)
+    else:
+        content, regenerated = _body_html(body, sidecar, _image_src(stem))
+        if not regenerated and sha256(content) != sidecar["body_sha256"]:
+            raise ConversionError(f"{stem}.md: rebuilt body differs from the original")
+        fields = _sidecar_fields(sidecar, props, stem)
+    fields["guid"] = guid
     if options.image_map is not None:
         content = _apply_image_map(options, stem, content)
     fields["content:encoded"] = content
@@ -191,15 +231,13 @@ def _article(options: _Options, path: Path) -> _Article:
     images = (
         {} if options.image_map is not None else _collect_images(options, stem, content)
     )
-    inputs = {
-        p.name: manifest.sha256_bytes(p.read_bytes())
-        for p in (path, folder / f"{stem}.note.json")
-    }
+    inputs = {path.name: manifest.sha256_bytes(path.read_bytes())}
+    if sidecar is not None:
+        sidecar_path = folder / f"{stem}.note.json"
+        inputs[sidecar_path.name] = manifest.sha256_bytes(sidecar_path.read_bytes())
     for name, data in images.items():
         inputs[f"{stem}-img/{name}"] = manifest.sha256_bytes(data)
-    return _Article(
-        stem, fields, props["platform_post_id"], images, inputs, regenerated
-    )
+    return _Article(stem, fields, guid, sha256(body), images, inputs, regenerated)
 
 
 def _check_inputs(articles: Sequence[Path]) -> Path:
@@ -229,16 +267,12 @@ def _write_zip(path: Path, xml_name: str, xml: str, assets: dict[str, bytes]) ->
             archive.writestr(entry(f"assets/{name}"), assets[name])
 
 
-def _read_channel(folder: Path) -> tuple[dict[str, str], dict[str, str], list[str]]:
+def _read_channel(folder: Path) -> tuple[dict[str, str], dict[str, str]]:
     data = _read_json(folder / CHANNEL_NAME)
-    channel, author, guids = data.get("channel"), data.get("author"), data.get("guids")
-    if not (
-        isinstance(channel, dict)
-        and isinstance(author, dict)
-        and isinstance(guids, list)
-    ):
+    channel, author = data.get("channel"), data.get("author")
+    if not (isinstance(channel, dict) and isinstance(author, dict)):
         raise ConversionError(f"{CHANNEL_NAME}: unexpected structure")
-    return channel, author, guids
+    return channel, author
 
 
 def _merge_assets(built: list[_Article]) -> dict[str, bytes]:
@@ -273,10 +307,7 @@ def _manifest(
         command="note-md-to-wxr",
         allow_lossy=options.allow_lossy,
         inputs=inputs,
-        articles=[
-            manifest.ArticleEntry(a.guid, a.stem, sha256(a.fields["content:encoded"]))
-            for a in built
-        ],
+        articles=[manifest.ArticleEntry(a.guid, a.stem, a.body_sha256) for a in built],
         image_count=len(assets),
         total_size=sum(len(d) for d in assets.values()),
         warnings=options.warnings,
@@ -302,18 +333,18 @@ def convert(
     checked = validate(folder, allow_lossy=allow_lossy)
     if checked.errors:
         raise ConversionError("\n".join(checked.errors))
-    channel, author, guids = _read_channel(folder)
+    channel, author = _read_channel(folder)
     options = _Options(
         folder,
+        channel,
         allow_lossy,
         _load_image_map(image_map) if image_map else None,
         list(checked.warnings),
     )
     built = [_article(options, Path(p).resolve()) for p in articles]
-    unknown = [a.guid for a in built if a.guid not in guids]
-    if unknown:
-        raise ConversionError(f"not in {CHANNEL_NAME}: {', '.join(unknown)}")
-    built.sort(key=lambda a: guids.index(a.guid))
+    built.sort(key=lambda a: (a.fields["wp:post_date_gmt"], a.guid))
+    for number, article in enumerate(built, 1):
+        article.fields.setdefault("wp:post_id", str(number))
     assets = _merge_assets(built)
     account = author.get("wp:author_login", "")
     zip_path = out / f"note-{account}-1.zip"

@@ -25,7 +25,7 @@ def _snapshot(directory: Path) -> dict[Path, bytes]:
 
 def _hand_imported(export: Path, tmp_path: Path) -> Path:
     """A posts directory like a hand import: no block attributes, a note added."""
-    convert(export, tmp_path / "generated")
+    convert(export, tmp_path / "generated", with_sidecar=True)
     posts = tmp_path / "posts"
     folder = posts / "acct-x"
     folder.mkdir(parents=True)
@@ -51,7 +51,7 @@ def test_into_writes_new_articles_channel_and_a_valid_manifest(
 ) -> None:
     posts = tmp_path / "posts"
     posts.mkdir()
-    summary = convert(export, into_dir=posts).into
+    summary = convert(export, into_dir=posts, with_sidecar=True).into
 
     assert summary is not None
     assert sorted(summary.created) == ["Draft", "Published"]
@@ -98,6 +98,15 @@ def test_into_updates_channel_keeping_existing_guids_and_order(
     assert len(result["guids"]) == 3
     assert result["channel"]["title"] != "stale"
     assert result["extra"] == "kept"
+
+
+def test_into_writes_no_sidecar_by_default(export: Path, tmp_path: Path) -> None:
+    posts = tmp_path / "posts"
+    posts.mkdir()
+    convert(export, into_dir=posts)
+    folder = posts / "acct-x"
+    assert not list(folder.glob("*.note.json"))
+    assert validate(folder).errors == []
 
 
 def test_into_rejects_an_unreadable_channel_before_writing(
@@ -283,7 +292,7 @@ def test_into_writes_missing_sidecar_for_unchanged_article(
     _drop_sidecar(folder, "Published")
     manuscript = (folder / "Published.md").read_bytes()
 
-    summary = convert(export, into_dir=posts).into
+    summary = convert(export, into_dir=posts, with_sidecar=True).into
 
     assert summary is not None and summary.sidecars == 1
     assert (folder / "Published.md").read_bytes() == manuscript
@@ -300,7 +309,7 @@ def test_into_writes_missing_sidecar_for_kept_needs_update_article(
     _drop_sidecar(folder, "Draft")
     manuscript = draft.read_bytes()
 
-    assert main([str(export), "--into", str(posts)]) == 0
+    assert main([str(export), "--into", str(posts), "--with-sidecar"]) == 0
 
     assert "sidecars written 1" in capsys.readouterr().out
     assert draft.read_bytes() == manuscript
@@ -317,7 +326,7 @@ def test_into_keeps_existing_sidecar_without_force(
     sidecar.write_text(sidecar.read_text("utf-8") + " ", "utf-8")
     before = sidecar.read_bytes()
 
-    summary = convert(export, into_dir=posts).into
+    summary = convert(export, into_dir=posts, with_sidecar=True).into
 
     assert summary is not None and summary.sidecars == 0
     assert sidecar.read_bytes() == before

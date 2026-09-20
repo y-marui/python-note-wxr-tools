@@ -343,13 +343,21 @@ def _inline_part(child: Node | str, resolve_image: ImageResolver) -> str:
     raise Unsupported(tag)
 
 
+EDGE_SPACE = re.compile(r"(?:\s|\\\n)+")
+
+
 def _wrap(inner: str, mark: str) -> str:
-    stripped = inner.strip()
-    if not stripped:
+    """Wrap ``inner`` in ``mark`` keeping spaces and breaks outside the marks.
+
+    A break inside the emphasis would leave the marker next to a bare ``\\``.
+    """
+    lead = EDGE_SPACE.match(inner)
+    trail = re.search(EDGE_SPACE.pattern + "$", inner)
+    start = lead.end() if lead else 0
+    end = trail.start() if trail else len(inner)
+    if start >= end:
         return inner
-    lead = inner[: len(inner) - len(inner.lstrip())]
-    trail = inner[len(inner.rstrip()) :]
-    return f"{lead}{mark}{stripped}{mark}{trail}"
+    return f"{inner[:start]}{mark}{inner[start:end]}{mark}{inner[end:]}"
 
 
 def _code_span(code: str) -> str:

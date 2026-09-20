@@ -11,7 +11,10 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from note_wxr_tools import against, manifest
-from note_wxr_tools.frontmatter import FrontMatterError, parse
+from note_wxr_tools.frontmatter import FrontMatterError, article_guid, parse
+from note_wxr_tools.htmlmd import sha256
+
+SIDECAR_SUFFIX = ".note.json"
 
 
 @dataclass
@@ -144,19 +147,19 @@ def apply(
 
 
 def _fill_missing(files: dict[Path, bytes], paths: list[Path], force: bool) -> int:
-    """Write the sidecar and images of a matched article, never its manuscript.
+    """Write the sidecar (if any) and images of a matched article, never its manuscript.
 
     An existing sidecar is replaced only with ``force``; existing images are
-    kept. Returns 1 when the sidecar was written, else 0.
+    kept. Returns the number of sidecars written.
     """
-    sidecar = paths[1]
-    written = int(force or not sidecar.exists())
+    written = 0
     for path in paths[1:]:
-        skip = path.exists() and (path != sidecar or not force)
-        if skip:
+        sidecar = path.name.endswith(SIDECAR_SUFFIX)
+        if path.exists() and not (sidecar and force):
             continue
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_bytes(files[path])
+        written += sidecar
     return written
 
 
@@ -169,22 +172,21 @@ def folder_manifest(
 ) -> dict[str, object]:
     """Describe the manuscripts now in ``folder`` (for ``--into``).
 
-    Manuscripts without a readable sidecar are left out, so validation still
-    reports them.
+    Manuscripts that cannot be read are left out, so validation still reports
+    them.
     """
     entries = []
     for path in sorted(folder.glob("*.md")):
         if path.name == "README.md" or path.name.startswith("."):
             continue
         try:
-            props, _ = parse(path.read_text(encoding="utf-8"))
-            sidecar = json.loads(path.with_suffix(".note.json").read_text("utf-8"))
+            props, body = parse(path.read_text(encoding="utf-8"))
             entries.append(
                 manifest.ArticleEntry(
-                    props["platform_post_id"], path.stem, sidecar["body_sha256"]
+                    article_guid(props, path.stem), path.stem, sha256(body)
                 )
             )
-        except (FrontMatterError, OSError, ValueError, KeyError, TypeError):
+        except (FrontMatterError, OSError, UnicodeDecodeError):
             continue
     images = [
         f

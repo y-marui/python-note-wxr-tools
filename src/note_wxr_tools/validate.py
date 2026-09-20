@@ -14,13 +14,12 @@ from pathlib import Path
 from urllib.parse import unquote, urlparse
 
 from note_wxr_tools import manifest
-from note_wxr_tools.frontmatter import FrontMatterError, parse
+from note_wxr_tools.frontmatter import FrontMatterError, article_guid, parse
 from note_wxr_tools.htmlmd import sha256
 
 REQUIRED_PROPERTIES = (
     "title",
     "account",
-    "platform_post_id",
     "platform_created_at",
     "platform_updated_at",
     "publication_status",
@@ -88,19 +87,19 @@ def _valid_sidecar(data: object) -> bool:
     )
 
 
-def _check_sidecar(path: Path, result: Result) -> str | None:
-    """Validate a sidecar and return its body hash."""
+def _check_sidecar(path: Path, result: Result) -> None:
+    """Validate a sidecar; it is optional, so a missing file is fine."""
+    if not path.exists():
+        return
     data = _load_json(path, result)
     if data is None:
-        return None
+        return
     if not _valid_sidecar(data):
         result.errors.append(f"{path.name}: unexpected structure")
-        return None
+        return
     assert isinstance(data, dict)
-    body_hash: str = data["body_sha256"]
-    if sha256("".join(b["html"] for b in data["blocks"])) != body_hash:
+    if sha256("".join(b["html"] for b in data["blocks"])) != data["body_sha256"]:
         result.errors.append(f"{path.name}: block HTML does not match body_sha256")
-    return body_hash
 
 
 def _check_images(
@@ -149,35 +148,38 @@ def _check_article(
         if props.get(key) and not ISO_DATETIME.fullmatch(props[key]):
             result.errors.append(f"{name}: {key} is not ISO 8601 with an offset")
     _check_images(folder, path.stem, body, allow_lossy, result)
-    body_hash = _check_sidecar(folder / f"{path.stem}.note.json", result)
-    guid = props.get("platform_post_id")
-    if guid is None or body_hash is None:
-        return None
-    return _Article(guid, path.stem, body_hash)
+    _check_sidecar(folder / f"{path.stem}.note.json", result)
+    return _Article(article_guid(props, path.stem), path.stem, sha256(body))
 
 
 def _check_manifest(folder: Path, articles: list[_Article], result: Result) -> None:
-    """Check the manifest against the files on disk."""
+    """Check the manifest, if there is one, against the files on disk.
+
+    Manuscripts may be edited or added after the manifest was written, so
+    differences per article are warnings; only a manifest that contradicts
+    itself is an error.
+    """
+    if not (folder / manifest.MANIFEST_NAME).exists():
+        return
     data = _load_json(folder / manifest.MANIFEST_NAME, result)
     if not isinstance(data, dict):
         return
+    warn = result.warnings.append
     entries = [a for a in data.get("articles", []) if isinstance(a, dict)]
     listed = {str(a.get("title")): a for a in entries}
     disk = {a.title: a for a in articles}
     for title in sorted(listed.keys() - disk.keys()):
-        result.errors.append(f"manifest: article {title} not found on disk")
+        warn(f"manifest: article {title} not found on disk")
     for title in sorted(disk.keys() - listed.keys()):
-        result.errors.append(f"manifest: article {title} is not listed")
+        warn(f"manifest: article {title} is not listed")
     for title in sorted(listed.keys() & disk.keys()):
         entry, article = listed[title], disk[title]
         if entry.get("guid") != article.guid:
-            result.errors.append(
-                f"manifest: guid of {title} differs from the manuscript"
-            )
+            warn(f"manifest: guid of {title} differs from the manuscript")
         if entry.get("body_sha256") != article.body_sha256:
-            result.errors.append(f"manifest: body hash of {title} differs from sidecar")
+            warn(f"manifest: body hash of {title} differs from the manuscript")
     if data.get("article_count") != len(entries):
-        result.errors.append("manifest: article_count does not match articles")
+        warn("manifest: article_count does not match articles")
     pairs = [(str(a.get("guid")), str(a.get("body_sha256"))) for a in entries]
     if data.get("body_sha256") != manifest.overall_body_hash(pairs):
         result.errors.append("manifest: overall body_sha256 does not match articles")
