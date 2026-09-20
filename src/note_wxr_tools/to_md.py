@@ -64,6 +64,9 @@ KNOWN_FIELDS = frozenset(SIDECAR_FIELDS) | {
 }
 
 
+CHANNEL_NAME = ".note-channel.json"
+
+
 class ConversionError(Exception):
     """One or more problems prevent a faithful conversion."""
 
@@ -83,6 +86,7 @@ class _Plan:
     errors: list[str] = field(default_factory=list)
     report: Report = field(default_factory=Report)
     article_files: dict[str, list[Path]] = field(default_factory=dict)
+    folder: Path = Path(".")
 
 
 def sanitize_filename(title: str) -> str:
@@ -132,6 +136,7 @@ class _Converter:
         self.image_size = 0
         self.account = export.author.get("wp:author_login", "")
         self.folder = out / self.account.replace("_", "-")
+        self.plan.folder = self.folder
 
     def lossy(self, message: str) -> None:
         if self.allow_lossy:
@@ -318,7 +323,7 @@ class _Converter:
         self.plan.files[self.folder / manifest.MANIFEST_NAME] = _json(document)
 
     def _channel(self, guids: list[str]) -> None:
-        self.plan.files[self.folder / ".note-channel.json"] = _json(
+        self.plan.files[self.folder / CHANNEL_NAME] = _json(
             {
                 "channel": self.export.channel,
                 "author": self.export.author,
@@ -398,17 +403,28 @@ def convert(
 def _convert_into(plan: _Plan, posts: Path, matched: set[str], force: bool) -> Report:
     """Add new articles to ``posts``; overwrite differing ones only with ``force``.
 
-    The manifest and channel file describe a whole export, so they are not
-    written into an existing posts directory.
+    The manifest describes a whole export, so it is not written into an
+    existing posts directory. ``.note-channel.json`` is created or updated.
     """
     plan.errors.extend(into.find_conflicts(plan.article_files, matched))
     if plan.errors:
         raise ConversionError("\n".join(plan.errors))
     comparison = _compare_against(plan, posts)
     plan.report.warnings.extend(comparison.warnings)
+    channel_path = plan.folder / CHANNEL_NAME
+    try:
+        state, channel = into.prepare_channel(
+            channel_path, plan.files.pop(channel_path)
+        )
+    except ValueError as error:
+        raise ConversionError(str(error)) from error
     plan.report.into = into.apply(
         plan.files, plan.article_files, comparison, matched, force
     )
+    plan.report.into.channel = state
+    if channel is not None:
+        channel_path.parent.mkdir(parents=True, exist_ok=True)
+        channel_path.write_bytes(channel)
     return plan.report
 
 
@@ -491,7 +507,8 @@ def main(argv: Sequence[str] | None = None) -> int:
 def _print_into(summary: into.IntoSummary) -> int:
     print(
         f"created {len(summary.created)}, overwritten {len(summary.overwritten)}, "
-        f"unchanged {summary.unchanged}, differing {len(summary.pending)}"
+        f"unchanged {summary.unchanged}, differing {len(summary.pending)}, "
+        f"channel {summary.channel}"
     )
     if not summary.pending:
         return 0
