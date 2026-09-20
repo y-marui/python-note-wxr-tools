@@ -18,3 +18,5 @@
 ### Fixed
 
 - `note-wxr-validate` (and so `note-md-to-wxr`) no longer treats `README.md` or hidden Markdown files in the account folder as manuscripts.
+- `note-wxr-to-md --into` keeps `<account>/manifest.json` up to date, so `note-wxr-validate` and `note-md-to-wxr` accept an account imported with `--into`.
+- `note-wxr-to-md --into` writes the missing `<title>.note.json` and images of unchanged and kept (`needs_update`) articles without touching the manuscript; an existing sidecar is replaced only with `--force`. The summary reports `sidecars written N`.

@@ -7,6 +7,8 @@ import pytest
 
 from note_wxr_tools.into import merge_front_matter
 from note_wxr_tools.to_md import ConversionError, convert, main
+from note_wxr_tools.to_wxr import main as to_wxr_main
+from note_wxr_tools.validate import validate
 from tests.factory import REALISTIC_ASSETS, realistic_items
 
 MakeExport = Callable[..., Path]
@@ -44,7 +46,7 @@ def _hand_imported(export: Path, tmp_path: Path) -> Path:
     return posts
 
 
-def test_into_writes_new_articles_and_channel_without_manifest(
+def test_into_writes_new_articles_channel_and_a_valid_manifest(
     export: Path, tmp_path: Path
 ) -> None:
     posts = tmp_path / "posts"
@@ -57,7 +59,8 @@ def test_into_writes_new_articles_and_channel_without_manifest(
     assert (folder / "Published.md").exists()
     assert (folder / "Published.note.json").exists()
     assert any(folder.glob("*-img/*"))
-    assert not (folder / "manifest.json").exists()
+    assert (folder / "manifest.json").exists()
+    assert validate(folder).errors == []
     assert summary.channel == "created"
     channel = json.loads((folder / ".note-channel.json").read_text("utf-8"))
     assert len(channel["guids"]) == 2
@@ -124,6 +127,7 @@ def test_into_is_idempotent(export: Path, tmp_path: Path) -> None:
 
 def test_into_skips_hand_imported_copies(export: Path, tmp_path: Path) -> None:
     posts = _hand_imported(export, tmp_path)
+    convert(export, into_dir=posts)  # adds the missing manifest
     before = _snapshot(posts)
 
     summary = convert(export, into_dir=posts).into
@@ -137,6 +141,7 @@ def test_into_reports_differences_and_writes_nothing_without_force(
 ) -> None:
     posts = _hand_imported(export, tmp_path)
     draft = posts / "acct-x" / "Draft.md"
+    convert(export, into_dir=posts)  # adds the missing manifest
     draft.write_text(draft.read_text("utf-8").replace("Draft text", "Edited"), "utf-8")
     before = _snapshot(posts)
 
@@ -180,6 +185,7 @@ def test_into_keeps_needs_update_manuscripts_even_with_force(
     export: Path, tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
     posts = _hand_imported(export, tmp_path)
+    convert(export, into_dir=posts)  # adds the missing manifest
     _mark_needs_update(posts)
     before = _snapshot(posts)
 
@@ -247,3 +253,71 @@ def test_merge_front_matter_keeps_unknown_entries_verbatim() -> None:
         '---\ntitle: "New"\nplatform: "note"\neditorial_note: |\n  a\n  b\n'
         "tags:\n  - x\n---\n\nnew body\n"
     )
+
+
+def _drop_sidecar(folder: Path, stem: str) -> None:
+    (folder / f"{stem}.note.json").unlink()
+    for image in (folder / f"{stem}-img").glob("*"):
+        image.unlink()
+
+
+def test_into_hand_imported_account_validates_and_re_exports(
+    export: Path, tmp_path: Path
+) -> None:
+    posts = _hand_imported(export, tmp_path)
+    folder = posts / "acct-x"
+    assert not (folder / "manifest.json").exists()
+
+    convert(export, into_dir=posts)
+
+    assert validate(folder).errors == []
+    articles = sorted(folder.glob("*.md"))
+    assert to_wxr_main([*map(str, articles), "--out", str(tmp_path / "zip")]) == 0
+
+
+def test_into_writes_missing_sidecar_for_unchanged_article(
+    export: Path, tmp_path: Path
+) -> None:
+    posts = _hand_imported(export, tmp_path)
+    folder = posts / "acct-x"
+    _drop_sidecar(folder, "Published")
+    manuscript = (folder / "Published.md").read_bytes()
+
+    summary = convert(export, into_dir=posts).into
+
+    assert summary is not None and summary.sidecars == 1
+    assert (folder / "Published.md").read_bytes() == manuscript
+    assert any((folder / "Published-img").glob("*"))
+    assert validate(folder).errors == []
+
+
+def test_into_writes_missing_sidecar_for_kept_needs_update_article(
+    export: Path, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    posts = _hand_imported(export, tmp_path)
+    folder = posts / "acct-x"
+    draft = _mark_needs_update(posts)
+    _drop_sidecar(folder, "Draft")
+    manuscript = draft.read_bytes()
+
+    assert main([str(export), "--into", str(posts)]) == 0
+
+    assert "sidecars written 1" in capsys.readouterr().out
+    assert draft.read_bytes() == manuscript
+    original = json.loads((folder / "Draft.note.json").read_text("utf-8"))
+    assert "Local edit" not in json.dumps(original)
+    assert validate(folder).errors == []
+
+
+def test_into_keeps_existing_sidecar_without_force(
+    export: Path, tmp_path: Path
+) -> None:
+    posts = _hand_imported(export, tmp_path)
+    sidecar = posts / "acct-x" / "Published.note.json"
+    sidecar.write_text(sidecar.read_text("utf-8") + " ", "utf-8")
+    before = sidecar.read_bytes()
+
+    summary = convert(export, into_dir=posts).into
+
+    assert summary is not None and summary.sidecars == 0
+    assert sidecar.read_bytes() == before

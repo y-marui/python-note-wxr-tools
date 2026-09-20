@@ -83,8 +83,21 @@ posts directory without manual merging. Articles are matched to manuscripts
 - Files that exist only in the posts directory are never deleted.
 - A new article whose file name is already taken by another file fails, and
   nothing is written (use `--rename`).
-- `manifest.json` describes a whole export, so it is not written into an
-  existing posts directory.
+- Matched articles that are left untouched (unchanged, or kept as
+  `needs_update`) still get the files they lack, so the account can be
+  re-exported: a missing `<title>.note.json` and missing images under
+  `<title>-img/` are written from the export, and the `.md` is never touched.
+  For kept articles the sidecar holds the export's original blocks, which the
+  regeneration rule expects (edited blocks are regenerated from the manuscript).
+  An existing sidecar is replaced only with `--force`; existing images are
+  kept. The summary reports `sidecars written N`.
+- `<account>/manifest.json` is rewritten after each run to describe the
+  manuscripts now in the account folder (articles, body hashes, counts),
+  including those that exist only in the posts directory, so
+  `note-wxr-validate` and `note-md-to-wxr` accept the folder. It is left
+  untouched when those values are already current. `command` is
+  `note-wxr-to-md --into`, and `inputs` lists the export's files. Manuscripts
+  without a readable sidecar are not listed, so validation still reports them.
 - `<account>/.note-channel.json` is created when missing, so an imported
   account can be re-exported with `note-md-to-wxr`. When it exists, the
   `channel` and `author` fields are replaced by the export's and `guids`

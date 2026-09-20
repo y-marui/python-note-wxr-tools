@@ -10,7 +10,7 @@ import json
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from note_wxr_tools import against
+from note_wxr_tools import against, manifest
 from note_wxr_tools.frontmatter import FrontMatterError, parse
 
 
@@ -23,6 +23,7 @@ class IntoSummary:
     unchanged: int = 0
     pending: list[against.Difference] = field(default_factory=list)
     kept: list[str] = field(default_factory=list)
+    sidecars: int = 0
     channel: str = "unchanged"
 
 
@@ -127,8 +128,10 @@ def apply(
             summary.created.append(manuscript.stem)
         elif guid not in differing:
             summary.unchanged += 1
+            summary.sidecars += _fill_missing(files, paths, force)
         elif not overwrite_needs_update and _needs_update(manuscript):
             summary.kept.append(manuscript.stem)
+            summary.sidecars += _fill_missing(files, paths, force)
         elif force:
             existing = manuscript.read_text(encoding="utf-8")
             generated = files[manuscript].decode("utf-8")
@@ -138,6 +141,67 @@ def apply(
         else:
             summary.pending.append(differing[guid])
     return summary
+
+
+def _fill_missing(files: dict[Path, bytes], paths: list[Path], force: bool) -> int:
+    """Write the sidecar and images of a matched article, never its manuscript.
+
+    An existing sidecar is replaced only with ``force``; existing images are
+    kept. Returns 1 when the sidecar was written, else 0.
+    """
+    sidecar = paths[1]
+    written = int(force or not sidecar.exists())
+    for path in paths[1:]:
+        skip = path.exists() and (path != sidecar or not force)
+        if skip:
+            continue
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_bytes(files[path])
+    return written
+
+
+def folder_manifest(
+    folder: Path,
+    *,
+    allow_lossy: bool,
+    inputs: dict[str, str],
+    warnings: list[str],
+) -> dict[str, object]:
+    """Describe the manuscripts now in ``folder`` (for ``--into``).
+
+    Manuscripts without a readable sidecar are left out, so validation still
+    reports them.
+    """
+    entries = []
+    for path in sorted(folder.glob("*.md")):
+        if path.name == "README.md" or path.name.startswith("."):
+            continue
+        try:
+            props, _ = parse(path.read_text(encoding="utf-8"))
+            sidecar = json.loads(path.with_suffix(".note.json").read_text("utf-8"))
+            entries.append(
+                manifest.ArticleEntry(
+                    props["platform_post_id"], path.stem, sidecar["body_sha256"]
+                )
+            )
+        except (FrontMatterError, OSError, ValueError, KeyError, TypeError):
+            continue
+    images = [
+        f
+        for d in folder.glob("*-img")
+        if d.is_dir()
+        for f in d.rglob("*")
+        if f.is_file()
+    ]
+    return manifest.build(
+        command="note-wxr-to-md --into",
+        allow_lossy=allow_lossy,
+        inputs=inputs,
+        articles=entries,
+        image_count=len(images),
+        total_size=sum(f.stat().st_size for f in images),
+        warnings=warnings,
+    )
 
 
 def _needs_update(manuscript: Path) -> bool:
