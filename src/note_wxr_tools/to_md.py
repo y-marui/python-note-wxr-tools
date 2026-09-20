@@ -87,6 +87,8 @@ class _Plan:
     report: Report = field(default_factory=Report)
     article_files: dict[str, list[Path]] = field(default_factory=dict)
     folder: Path = Path(".")
+    inputs: dict[str, str] = field(default_factory=dict)
+    allow_lossy: bool = False
 
 
 def sanitize_filename(title: str) -> str:
@@ -137,6 +139,7 @@ class _Converter:
         self.account = export.author.get("wp:author_login", "")
         self.folder = out / self.account.replace("_", "-")
         self.plan.folder = self.folder
+        self.plan.allow_lossy = allow_lossy
 
     def lossy(self, message: str) -> None:
         if self.allow_lossy:
@@ -311,6 +314,7 @@ class _Converter:
             self.source.read_xml()
         )
         report = self.plan.report
+        self.plan.inputs = self.inputs
         document = manifest.build(
             command="note-wxr-to-md",
             allow_lossy=self.allow_lossy,
@@ -412,8 +416,8 @@ def _convert_into(
 ) -> Report:
     """Add new articles to ``posts``; overwrite differing ones only with ``force``.
 
-    The manifest describes a whole export, so it is not written into an
-    existing posts directory. ``.note-channel.json`` is created or updated.
+    ``.note-channel.json`` is created or updated, and ``manifest.json`` is
+    rewritten to describe the manuscripts now in the account folder.
     """
     plan.errors.extend(into.find_conflicts(plan.article_files, matched))
     if plan.errors:
@@ -439,7 +443,29 @@ def _convert_into(
     if channel is not None:
         channel_path.parent.mkdir(parents=True, exist_ok=True)
         channel_path.write_bytes(channel)
+    _write_manifest(plan)
     return plan.report
+
+
+def _write_manifest(plan: _Plan) -> None:
+    if not plan.folder.is_dir():
+        return
+    document = into.folder_manifest(
+        plan.folder,
+        allow_lossy=plan.allow_lossy,
+        inputs=plan.inputs,
+        warnings=plan.report.warnings,
+    )
+    path = plan.folder / manifest.MANIFEST_NAME
+    try:
+        current = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        current = None
+    # Leave an up-to-date manifest alone so a no-op run touches nothing.
+    keys = ("articles", "article_count", "image_count", "total_size", "body_sha256")
+    if isinstance(current, dict) and all(current.get(k) == document[k] for k in keys):
+        return
+    path.write_bytes(_json(document))
 
 
 def _rename(value: str) -> tuple[str, str]:
@@ -529,7 +555,8 @@ def _print_into(summary: into.IntoSummary) -> int:
     print(
         f"created {len(summary.created)}, overwritten {len(summary.overwritten)}, "
         f"unchanged {summary.unchanged}, differing {len(summary.pending)}, "
-        f"kept (needs_update) {len(summary.kept)}, channel {summary.channel}"
+        f"kept (needs_update) {len(summary.kept)}, "
+        f"sidecars written {summary.sidecars}, channel {summary.channel}"
     )
     for title in summary.kept:
         print(f"kept (needs_update): {title}")
