@@ -1,3 +1,4 @@
+import json
 import re
 from collections.abc import Callable
 from pathlib import Path
@@ -38,10 +39,12 @@ def _hand_imported(export: Path, tmp_path: Path) -> Path:
                 (folder / source.name / image.name).write_bytes(image.read_bytes())
         else:
             (folder / source.name).write_bytes(source.read_bytes())
+    channel = generated / ".note-channel.json"
+    (folder / channel.name).write_bytes(channel.read_bytes())
     return posts
 
 
-def test_into_writes_new_articles_without_manifest_or_channel(
+def test_into_writes_new_articles_and_channel_without_manifest(
     export: Path, tmp_path: Path
 ) -> None:
     posts = tmp_path / "posts"
@@ -55,7 +58,55 @@ def test_into_writes_new_articles_without_manifest_or_channel(
     assert (folder / "Published.note.json").exists()
     assert any(folder.glob("*-img/*"))
     assert not (folder / "manifest.json").exists()
-    assert not (folder / ".note-channel.json").exists()
+    assert summary.channel == "created"
+    channel = json.loads((folder / ".note-channel.json").read_text("utf-8"))
+    assert len(channel["guids"]) == 2
+
+
+def test_into_adds_missing_channel_to_a_hand_imported_account(
+    export: Path, tmp_path: Path
+) -> None:
+    posts = _hand_imported(export, tmp_path)
+    channel = posts / "acct-x" / ".note-channel.json"
+    expected = channel.read_bytes()
+    channel.unlink()
+
+    summary = convert(export, into_dir=posts).into
+    assert summary is not None and summary.channel == "created"
+    assert channel.read_bytes() == expected
+
+
+def test_into_updates_channel_keeping_existing_guids_and_order(
+    export: Path, tmp_path: Path
+) -> None:
+    posts = _hand_imported(export, tmp_path)
+    channel = posts / "acct-x" / ".note-channel.json"
+    data = json.loads(channel.read_text("utf-8"))
+    kept = data["guids"][1]
+    data["guids"] = ["old-guid", kept]
+    data["channel"]["title"] = "stale"
+    data["extra"] = "kept"
+    channel.write_text(json.dumps(data), "utf-8")
+
+    summary = convert(export, into_dir=posts).into
+    assert summary is not None and summary.channel == "updated"
+    result = json.loads(channel.read_text("utf-8"))
+    assert result["guids"][:2] == ["old-guid", kept]
+    assert len(result["guids"]) == 3
+    assert result["channel"]["title"] != "stale"
+    assert result["extra"] == "kept"
+
+
+def test_into_rejects_an_unreadable_channel_before_writing(
+    export: Path, tmp_path: Path
+) -> None:
+    posts = _hand_imported(export, tmp_path)
+    (posts / "acct-x" / ".note-channel.json").write_text("not json", "utf-8")
+    (posts / "acct-x" / "Draft.md").unlink()
+    (posts / "acct-x" / "Draft.note.json").unlink()
+    with pytest.raises(ConversionError, match="note-channel"):
+        convert(export, into_dir=posts)
+    assert not (posts / "acct-x" / "Draft.md").exists()
 
 
 def test_into_is_idempotent(export: Path, tmp_path: Path) -> None:

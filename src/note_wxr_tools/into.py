@@ -6,6 +6,7 @@ overwritten only on request, keeping properties the export does not know.
 
 from __future__ import annotations
 
+import json
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -20,6 +21,7 @@ class IntoSummary:
     overwritten: list[str] = field(default_factory=list)
     unchanged: int = 0
     pending: list[against.Difference] = field(default_factory=list)
+    channel: str = "unchanged"
 
 
 def find_conflicts(
@@ -34,6 +36,47 @@ def find_conflicts(
         for path in paths
         if path.exists()
     ]
+
+
+def merge_channel(existing: object, generated: dict[str, object]) -> dict[str, object]:
+    """Return ``existing`` with the export's channel data applied.
+
+    Channel and author fields are taken from the export. ``guids`` keeps the
+    existing order and appends new guids; none is ever removed.
+    """
+    if not isinstance(existing, dict):
+        raise ValueError("unexpected structure")
+    merged = {
+        **existing,
+        "channel": generated["channel"],
+        "author": generated["author"],
+    }
+    old = existing.get("guids", [])
+    if not isinstance(old, list):
+        raise ValueError("guids is not a list")
+    new = generated["guids"]
+    assert isinstance(new, list)
+    merged["guids"] = [*old, *(g for g in dict.fromkeys(new) if g not in old)]
+    return merged
+
+
+def prepare_channel(path: Path, generated: bytes) -> tuple[str, bytes | None]:
+    """Decide what to do with ``.note-channel.json`` without writing it.
+
+    Returns ``created``, ``updated`` or ``unchanged`` and the bytes to write
+    (``None`` when unchanged). Raises ``ValueError`` for an unusable file.
+    """
+    if not path.exists():
+        return "created", generated
+    try:
+        current = json.loads(path.read_text(encoding="utf-8"))
+        merged = merge_channel(current, json.loads(generated))
+    except (OSError, ValueError) as error:
+        raise ValueError(f"{path.name}: {error}") from error
+    if merged == current:
+        return "unchanged", None
+    text = json.dumps(merged, ensure_ascii=False, indent=2) + "\n"
+    return "updated", text.encode("utf-8")
 
 
 def merge_front_matter(existing: str, generated: str) -> str:

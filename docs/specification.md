@@ -77,8 +77,14 @@ posts directory without manual merging. Articles are matched to manuscripts
 - Files that exist only in the posts directory are never deleted.
 - A new article whose file name is already taken by another file fails, and
   nothing is written (use `--rename`).
-- `manifest.json` and `.note-channel.json` describe a whole export, so they
-  are not written into an existing posts directory.
+- `manifest.json` describes a whole export, so it is not written into an
+  existing posts directory.
+- `<account>/.note-channel.json` is created when missing, so an imported
+  account can be re-exported with `note-md-to-wxr`. When it exists, the
+  `channel` and `author` fields are replaced by the export's and `guids`
+  keeps its order with new guids appended; nothing is removed, and other keys
+  are kept. An unreadable file fails before anything is written. The summary
+  line ends with `channel created`, `channel updated` or `channel unchanged`.
 - Not combinable with `--out` or `--against`. Filenames follow the Filenames
   rules; the exit code is 0 when nothing differs.
 
