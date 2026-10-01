@@ -1,0 +1,47 @@
+[project]
+name = "python-note-wxr-tools"
+version = "0.1.0"
+description = "Convert note.com WXR exports to Markdown and back, with manifest-based verification"
+authors = [{ name = "Yukihiro Marui" }]
+requires-python = ">=3.11"
+dependencies = []
+
+[project.scripts]
+note-wxr-to-md = "note_wxr_tools.to_md:main"
+note-md-to-wxr = "note_wxr_tools.to_wxr:main"
+note-wxr-validate = "note_wxr_tools.validate:main"
+
+[dependency-groups]
+dev = [
+    "pytest>=8",
+    "ruff>=0.3",
+    "mypy>=1.8",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/note_wxr_tools"]
+
+[tool.ruff]
+line-length = 88
+target-version = "py311"
+# docs/dev-charter/ is a git subtree we cannot edit directly (see
+# AI_CONTEXT.md); recent ruff formats fenced Python blocks in Markdown
+# by default, which would otherwise flag it.
+extend-exclude = ["docs/dev-charter"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP"]
+
+[tool.mypy]
+python_version = "3.11"
+strict = true
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+# Tests that need a real export run only on request: pytest -m realdata
+addopts = "-m 'not realdata'"
+markers = ["realdata: needs a real note export (set NOTE_WXR_REALDATA_ZIP); local only"]

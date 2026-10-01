@@ -1,216 +1,88 @@
-# Dev Charter (full)
+# python-note-wxr-tools
 
 > **このファイルは正本（日本語版）です。**
 > 英語版（参照）は [README.md](README.md) を参照してください。
 
-[dev-charter](https://github.com/y-marui/dev-charter) の **full** 版（全体）。
-Python 開発環境・UI デザイン・収益化方針などソフトウェアプロジェクト固有の
-内容も含む憲章の全体。収録内容は [CHARTER_INDEX.md](CHARTER_INDEX.md) を
-参照。ドキュメントのみのリポジトリ向けの軽量版が必要な場合は `lite` ブランチ
-を検討すること。
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+[![CI](https://github.com/y-marui/python-note-wxr-tools/actions/workflows/ci.yml/badge.svg)](https://github.com/y-marui/python-note-wxr-tools/actions/workflows/ci.yml)
+[![Charter Check](https://github.com/y-marui/python-note-wxr-tools/actions/workflows/dev-charter-check.yml/badge.svg)](https://github.com/y-marui/python-note-wxr-tools/actions/workflows/dev-charter-check.yml)
+[![GitHub Sponsors](https://img.shields.io/github/sponsors/y-marui?style=social)](https://github.com/sponsors/y-marui)
+[![Buy Me a Coffee](https://img.shields.io/badge/Buy%20Me%20a%20Coffee-donate-yellow.svg)](https://www.buymeacoffee.com/y.marui)
 
-## Install (git subtree)
+一行概要：note のWXRエクスポートとMarkdown原稿を相互変換し、マニフェストで検証するツール。個別の記事・画像データは扱わず、利用者のリポジトリで管理する。
 
-```
-git remote add dev-charter https://github.com/y-marui/dev-charter
-git fetch dev-charter
-git subtree add --prefix=docs/dev-charter dev-charter full --squash
-```
+## Setup
 
-インストール後、以下のプロンプトを AI ツールに貼り付けてください：
-
-```
-docs/dev-charter/INSTALL_CHECKLIST.md を実行して
+```sh
+git clone https://github.com/y-marui/python-note-wxr-tools.git
+cd python-note-wxr-tools
+make install
 ```
 
-Quick Install のワンライナーでも同じことができる：
+## Usage
 
-```bash
-curl -fsSL https://raw.githubusercontent.com/y-marui/dev-charter/main/scripts/install.sh | bash
+### note-wxr-to-md
+
+note のエクスポート（ZIP または展開済みディレクトリ）を Markdown 原稿に変換する。
+
+```sh
+uv run note-wxr-to-md <export.zip|dir> --out <dir>
 ```
 
-## Update
+- `--out` 配下の `<アカウント>/` に、記事 `.md`、画像 `<タイトル>-img/`、`.note-channel.json` を出力する。元のタイトルがファイル名用のタイトルと異なる場合は、プロパティ `note_title` に元のタイトルを残す。
+- `--with-sidecar` を付けると `<タイトル>.note.json`（元のブロック HTML と item フィールド）も出力する。`note-md-to-wxr` は存在すればこれを使い、無ければ front matter と Markdown から WXR を組み立てる。
+- 既存ファイルは `--force` を付けない限り上書きしない。
+- タイトルが空の記事は `無題 (YYYY-MM-DD <guid 先頭6文字>)`、重複する記事は末尾に ` (<guid 先頭6文字>)` を付けて自動的に命名する（手作業は不要）。`--rename "<guid>=<新タイトル>"` で個別に上書きできる。
+- 情報が失われる変換は失敗する。警告に下げるには `--allow-lossy` を付ける。
+- `--against <posts dir>` は書き出さずに差分だけを報告する（`--out` とは併用不可）。手で取り込んだ原稿と `platform_post_id` で照合し、プロパティと本文の差分を出す。posts 側には一切書き込まない。
+- `--into <posts dir>` は既存の posts ディレクトリに新規記事を追加する（`--out`・`--against` とは併用不可）。`platform_post_id` で一致し変更のない記事はスキップし、差分のある記事は `--against` と同じ差分を報告して何も書かず終了コード 1 で終わる。`--force` を付けると `editorial_note` などの追加プロパティを残したまま上書きする。`publication_status: needs_update` の原稿は `--force` を付けても上書きしない（`kept (needs_update)` として報告し、終了コードには影響しない）。`--overwrite-needs-update` でこの保護を解除できる。posts 側にしかないファイルは削除しない。変更のない記事・`kept (needs_update)` の記事に欠けている画像は書き出し（`--with-sidecar` の場合は欠けているサイドカーも。既存のサイドカーは `--force` のときだけ置き換え、原稿には触れない）、`<アカウント>/manifest.json` は常に最新に保つため、`note-wxr-validate` と `note-md-to-wxr` がそのフォルダを受け付ける。`<アカウント>/.note-channel.json` は無ければ作成し、あれば新しい guid を追加する形で更新する（何も削除しない）ため、`note-md-to-wxr` で再エクスポートできる。
+- 仕様は [docs/specification.md](docs/specification.md) を参照。
 
-Quick Install のワンライナーを再実行するだけでも更新できる。既存の導入と
-そのブランチ（ここでは full）を検知して `git subtree pull` を自動実行する
-（未コミットの変更があれば自動で stash/復元し、テンプレートリポジトリの
-場合は完全な再同期にフォールバックする）：
+### note-wxr-validate
 
-```bash
-curl -fsSL https://raw.githubusercontent.com/y-marui/dev-charter/main/scripts/install.sh | bash
+変換した原稿フォルダ（アカウントフォルダ）を仕様に照らして検査する。エラーがあれば終了コード 1 を返す。
+
+```sh
+uv run note-wxr-validate <dir>
 ```
 
-手動で更新する場合：`dev-charter` リモートが未設定の場合（プロジェクトを clone した直後など）は先に追加する：
+- 必須プロパティ、画像の参照先、（存在すれば）サイドカーのハッシュを確認する。`manifest.json` があればそれも確認する（記事ごとの差異は警告）。
+- フォルダ内の `README.md` と隠しファイルは原稿として扱わない。
+- `note-wxr-to-md` は同じフォルダに `manifest.json` を書き出す。
 
-```
-git remote add dev-charter https://github.com/y-marui/dev-charter
-git subtree pull --prefix=docs/dev-charter dev-charter full --squash
-```
+### note-md-to-wxr
 
-> **Note（テンプレートリポジトリから作成したプロジェクト）:**
-> GitHub テンプレートはファイルのみコピーし git 履歴を引き継がないため、`git subtree pull` は失敗します。
-> `check-charter.yml` ワークフローがこのケースを自動検出して対処します。
-> 手動で更新する場合は `git subtree pull` の代わりに以下を実行してください：
-> 作業ツリーが clean であることを確認してから実行してください（`git reset --hard HEAD` は未コミット変更を破棄します）。
-> 最後の commit は、`scripts/check-charter-subtree-edit.sh` を導入済みならそれに拒否されないよう、
-> 実際の `git subtree` マージと同じ形（`MERGE_HEAD` ＋ trailer 付き squash commit）で作成します：
-> ```bash
-> git remote add dev-charter https://github.com/y-marui/dev-charter || true
-> git fetch dev-charter
-> git reset --hard HEAD
-> git clean -fd docs/dev-charter/
-> SPLIT=$(git rev-parse dev-charter/full)
-> rm -rf docs/dev-charter/
-> mkdir -p docs/dev-charter/
-> git archive dev-charter/full | tar -x -C docs/dev-charter/
-> git add docs/dev-charter/
-> MSG="Squashed 'docs/dev-charter/' content from commit ${SPLIT}
->
-> git-subtree-dir: docs/dev-charter
-> git-subtree-split: ${SPLIT}"
-> SQUASH=$(git commit-tree "$(git write-tree)" -p "$SPLIT" -m "$MSG")
-> echo "$SQUASH" > "$(git rev-parse --git-path MERGE_HEAD)"
-> printf '%s\n' "$MSG" > "$(git rev-parse --git-path MERGE_MSG)"
-> git commit --no-edit
-> ```
+原稿を note にインポートできる ZIP に戻す。原稿は同じアカウントフォルダのものを明示的に指定する。
 
-> **Note（`git subtree pull` の仕上げの commit が pre-commit フックに拒否される場合）:**
-> ローカルの `scripts/check-charter-subtree-edit.sh` 等が更新前の古い内容のままだと、
-> 取り込もうとしている変更自体に含まれる修正（例: `MERGE_HEAD` 例外）がまだ手元に無いため、
-> マージを完了させる commit がブロックされ、`.git/MERGE_HEAD` が残ったまま失敗することがあります。
-> 新しく別の pre-sync commit を先に作ろうとしても、今度は `docs/dev-charter/VERSION` が
-> まだ古いままなので `check-local-charter-version.sh` にブロックされます。
-> `.git/MERGE_HEAD` が残っている場合は、マージをやり直すのではなく完了させてください
-> （Quick Install のワンライナーで更新する場合はこの手順を自動で行います）：
-> ```bash
-> # docs/dev-charter/scripts/ と差分があるファイルだけ再コピーする（実行権限も維持）
-> for f in scripts/*.sh scripts/*.ps1; do
->   [ -e "$f" ] || continue
->   incoming="docs/dev-charter/scripts/$(basename "$f")"
->   [ -f "$incoming" ] && ! cmp -s "$f" "$incoming" && cp "$incoming" "$f" && chmod +x "$f"
-> done
-> git add scripts/
-> git commit --no-edit
-> ```
-> `docs/dev-charter/` 配下に競合がある場合（共有履歴が組み替えられていた場合など）は、
-> このツリーはローカルで手編集しない前提のため、先に
-> `git checkout --theirs -- docs/dev-charter/ && git add docs/dev-charter/` で
-> 常に取り込み側を採用してから上記を実行してください。
-
-更新後、以下のプロンプトを AI ツールに貼り付けてください：
-
-```
-docs/dev-charter/UPDATE_CHECKLIST.md を実行して
+```sh
+uv run note-md-to-wxr <article.md>... --out <dir>
 ```
 
-## Version Check (CI)
+- 先に validator を実行し、失敗したら何も書かない。
+- 各 item を front matter、Markdown 本文、`.note-channel.json` から組み立てる（`platform_created_at` 順に並べ、`post_id` は順に採番）。`<タイトル>.note.json` があれば従来どおり使う。`platform_post_id` を持たない記事（Obsidian で作成したもの）には、安定した guid を生成する。
+- 編集していないブロックは元の HTML を再利用し、編集したブロックだけ Markdown から再生成する。
+- `--out` に `note-<アカウント>-1.zip` と `manifest.json` を出力する。既存ファイルは `--force` なしでは上書きしない。
+- `--image-map <map.json>` で `/assets/` の参照を公開 HTTPS URL に置き換える（`{"<ファイル名>": "https://..."}`）。未マップの画像があればエラー。この出力は元のエクスポートと byte 一致しない。
+- `--allow-lossy` で、画像ファイル欠落・解決できない画像 URL・guid 重複を警告に下げる（manifest に記録）。
 
-`.github/workflows/dev-charter-check.yml` をプロジェクトに追加すると、
-PR作成や main への push をきっかけに最新バージョンを確認し、古い場合は update PR を作成します
-（直近7日以内に成功したチェックがあればスキップするため、活発な repo でも毎回チェックが走ることはありません）。
+### Development commands
 
-```yaml
-name: Dev Charter
-
-on:
-  pull_request:
-    types: [opened, synchronize, reopened, ready_for_review]
-  push:
-    branches: [main]
-  workflow_dispatch:
-
-concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
-
-jobs:
-  check:
-    name: Check
-    if: github.actor != 'dependabot[bot]' && (github.event_name != 'pull_request' || github.event.pull_request.draft == false)
-    uses: y-marui/dev-charter/.github/workflows/check-charter.yml@main
-    permissions:
-      contents: write
-      pull-requests: write
-      actions: read
-
-  gate:
-    name: Dev Charter
-    needs: [check]
-    if: always()
-    runs-on: ubuntu-latest
-    steps:
-      - name: Verify dev-charter check did not fail
-        run: |
-          result="${{ needs.check.result }}"
-          if [ "$result" = "failure" ] || [ "$result" = "cancelled" ]; then
-            echo "::error::dev-charter check did not succeed (got: $result)"
-            exit 1
-          fi
-          echo "check result: $result (skipped is fine — draft or dependabot)"
+```sh
+make all    # lint + type + test
 ```
 
-full はこのワークフローの `branch` 入力の既定値なので、`with: branch: full` を
-明示する必要はない。
-
-> **Note:** dependabot が作成した PR や draft PR では `check` 自体がスキップされます
-> （後述）。`gate` はその場合も `skipped` を正常として扱い、必ず `Dev Charter`（ワークフロー
-> 自身の `name:` と同じ値）を報告します。Branch Protection（Ruleset）に必須ステータス
-> チェックとして登録するのは `Check / check` ではなく `Dev Charter` です（[CI_POLICY.md
-> の Ruleset 節](topics/CI_POLICY.md#branch-protection-ruleset)参照）。
-> `check` job だけを直接必須チェックに登録すると、skip 時に `Check / check` という
-> コンテキスト自体が一切報告されず、PR が `Expected — Waiting for status to be reported`
-> のまま永久にブロックされます。
-
-> **Note:** dependabot が作成した PR ではスキップされます（依存関係更新だけが動いている間はチェック不要という判断）。
-> repo が完全に静止している間はチェックが走らないため、活動に関わらず定期的に確認したい場合は
-> 上記に加えて低頻度の `schedule`（例：月1回）を併用してください。
-
-> **Note:** Draft PR ではスキップされます（draft はそもそもマージできないため、チェックが
-> 未報告のままでもリスクがない）。`on.pull_request.types` の `ready_for_review` により、
-> draft を解除した際は改めて実行されます。
-
-> **Note:** Branch Protection で direct push が禁止されている場合は、
-> GitHub Actions bot の bypass rule を追加してください
-> （Settings > Rules > Rulesets > Bypass list > GitHub Actions）。
-
-## Makefile Helper
-
-`git subtree pull` は作業ツリーに未コミットの変更があると失敗するため、
-実行前に自動で `git stash` し、完了後に `git stash pop` で戻す。
-
-導入時に `full` と `lite`（将来追加されるブランチも含む）のどちらを選んだかを
-このターゲットが覚えている必要はない。既存の `docs/dev-charter/CHARTER_INDEX.md`
-の `# Charter Index (<branch>)` マーカー（`scripts/publish-branch.sh` が生成。
-マーカーが無ければ `full` 扱い）から毎回導入済みブランチを自動判定するため、
-取り違えて更新してしまう事故（full 導入なのに lite で上書き、またはその逆）
-を防げる。
-
-```
-.PHONY: update-charter
-update-charter:
-	curl -fsSL https://raw.githubusercontent.com/y-marui/dev-charter/main/scripts/install.sh | CHARTER_UPDATE_ONLY=1 bash
-```
-
-`CHARTER_UPDATE_ONLY=1` により、万一まだ何も導入していない状態でこの
-ターゲットを実行してしまっても、`full` を勝手に新規インストールせず、
-full/lite どちらを入れるか確認（非対話環境ではエラーで案内）する。
-
-## Badge for Adopting Projects
-
-プロジェクトの README にこのバッジを追加すると、dev-charter の更新状態を可視化できます。
-
-```markdown
-[![Charter Check](https://github.com/{owner}/{repo}/actions/workflows/dev-charter-check.yml/badge.svg)](https://github.com/{owner}/{repo}/actions/workflows/dev-charter-check.yml)
-```
-
-`{owner}` と `{repo}` を自分のリポジトリのオーナー名・リポジトリ名に置き換えてください。
-
-| 状態 | Status Badge |
+| コマンド | 内容 |
 |---|---|
-| 未導入 / CI 未設定 | 赤（VERSION not found） |
-| 導入済み・最新 | 緑 |
-| 導入済み・更新必要 | 赤 |
+| `make install` | `uv sync`（依存関係インストール） |
+| `make lint` | `ruff check .`（linting） |
+| `make type` | `mypy src`（型チェック） |
+| `make test` | `pytest`（テスト実行） |
+| `make test-realdata` | 実データの往復テスト（ローカル専用。`NOTE_WXR_REALDATA_ZIP` に実際のエクスポート ZIP を指定。CI では実行しない） |
+| `make all` | lint + type + test |
+
+## License
+
+MIT License — [LICENSE](LICENSE) を参照
 
 ---
-
 *この文書には英語版 [README.md](README.md) があります。編集時は同一コミットで更新してください。*

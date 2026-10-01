@@ -1,0 +1,30 @@
+# Changelog
+
+## [Unreleased]
+
+### Added
+
+- Initial project setup from the Python package template (`note_wxr_tools` package).
+- `note-wxr-to-md`: convert a note WXR export (ZIP or directory) into Markdown manuscripts, `<title>.note.json` sidecars, `<title>-img/` images, `.note-channel.json` and `manifest.json`. Blocks outside the supported Markdown subset stay as raw HTML. Existing files are never overwritten without `--force`; empty titles become `無題 (YYYY-MM-DD <guid prefix>)` and duplicate titles get ` (<guid prefix>)` appended automatically; `--rename "<guid>=<title>"` overrides a title.
+- `note-wxr-to-md --against <posts dir>`: report-only comparison with manuscripts already imported by hand, matched by `platform_post_id`. Nothing is written to the posts directory.
+- `note-wxr-to-md` converts `ul`/`ol` blocks whose items hold a single `p` (as note writes them) to Markdown lists; the original HTML stays in the sidecar, so unedited blocks still round-trip exactly. Lists with anything more complex stay raw HTML.
+- `note-wxr-to-md --into <posts dir>`: add new articles to an existing posts directory. Unchanged articles are skipped; articles that differ are reported (exit 1) and left alone, or overwritten with `--force` while keeping extra properties such as `editorial_note`. Manuscripts with `publication_status: needs_update` are never overwritten, even with `--force` (`--overwrite-needs-update` lifts this). Files only in the posts directory are never deleted. It also creates or updates `<account>/.note-channel.json` (new guids are appended, nothing is removed) so the account can be re-exported with `note-md-to-wxr`.
+- `note-md-to-wxr`: turn manuscripts back into a note-importable ZIP. Unedited blocks reuse their original HTML, so an unedited export is reproduced byte for byte; edited blocks are regenerated from Markdown.
+- `note-md-to-wxr --image-map <map.json>`: replace `/assets/` references with public HTTPS URLs (output is outside the byte-exact guarantee).
+- `--allow-lossy` on both converters: downgrade a missing image, an unresolved image URL, a guid collision or an unrepresentable item field to warnings recorded in the manifest.
+- `note-wxr-validate <dir>`: check required properties, image references, sidecar hashes and that `manifest.json` matches the files on disk.
+- Round-trip tests on synthetic fixtures, and a local-only `make test-realdata` that round-trips a real export named by `NOTE_WXR_REALDATA_ZIP`.
+
+### Changed
+
+- Sidecars are no longer written by default. `note-md-to-wxr` builds every WXR item from the front matter, the Markdown body and `.note-channel.json` (constant item fields, dates and `link` derived from the properties, `dc:creator` from the channel title, `post_id` assigned in order, items ordered by `platform_created_at`). `--with-sidecar` on `note-wxr-to-md` keeps the old output, and an existing sidecar is still read. The byte-exact round trip now needs sidecars.
+- `note-wxr-to-md` writes a `note_title` property when the original title differs from the filename-safe title; `note-md-to-wxr` uses it as the item title.
+- `note-wxr-validate` no longer requires sidecars, a manifest or `platform_post_id` (a stable guid is generated for articles made in Obsidian). Manifest differences per article are warnings, and manifest body hashes now cover the manuscript body.
+
+### Fixed
+
+- Bold or italic containing `<br>` at its start or end (such as `<b>text<br></b>`) no longer produces unbalanced Markdown markers; the break is moved outside the emphasis.
+
+- `note-wxr-validate` (and so `note-md-to-wxr`) no longer treats `README.md` or hidden Markdown files in the account folder as manuscripts.
+- `note-wxr-to-md --into` keeps `<account>/manifest.json` up to date, so `note-wxr-validate` and `note-md-to-wxr` accept an account imported with `--into`.
+- `note-wxr-to-md --into` writes the missing `<title>.note.json` and images of unchanged and kept (`needs_update`) articles without touching the manuscript; an existing sidecar is replaced only with `--force`. The summary reports `sidecars written N`.
