@@ -75,11 +75,14 @@ jobs:
       - uses: actions/checkout@v7
       - uses: astral-sh/setup-uv@v10.3.2
         with:
-          enable-cache: true
+          enable-cache: ${{ !(vars.LINUX_RUNNER && !github.event.pull_request.head.repo.fork) }}
       - run: uv sync --frozen
       - run: uv run ruff check .
       - run: uv run ruff format --check .
       - run: uv run mypy src/
+      - name: Prune local uv cache
+        if: ${{ always() && vars.LINUX_RUNNER && !github.event.pull_request.head.repo.fork }}
+        run: uv cache prune --ci
 
   test:
     name: Test (pytest)
@@ -94,10 +97,13 @@ jobs:
       - uses: actions/checkout@v7
       - uses: astral-sh/setup-uv@v10.3.2
         with:
-          enable-cache: true
+          enable-cache: ${{ !(vars.LINUX_RUNNER && !github.event.pull_request.head.repo.fork) }}
           python-version: ${{ matrix.python-version }}
       - run: uv sync --frozen
       - run: uv run pytest
+      - name: Prune local uv cache
+        if: ${{ always() && vars.LINUX_RUNNER && !github.event.pull_request.head.repo.fork }}
+        run: uv cache prune --ci
 
   build:
     name: Build
@@ -109,9 +115,12 @@ jobs:
       - uses: actions/checkout@v7
       - uses: astral-sh/setup-uv@v10.3.2
         with:
-          enable-cache: true
+          enable-cache: ${{ !(vars.LINUX_RUNNER && !github.event.pull_request.head.repo.fork) }}
       - run: uv sync --frozen
       - run: uv build
+      - name: Prune local uv cache
+        if: ${{ always() && vars.LINUX_RUNNER && !github.event.pull_request.head.repo.fork }}
+        run: uv cache prune --ci
 
   gate:
     name: CI
