@@ -311,3 +311,17 @@ repos:
         entry: scripts/check-local-charter-version.sh
         pass_filenames: false
         always_run: true
+
+  # ----------------------------------------------------------------
+  # Hook script existence (SECURITY_POLICY.md)
+  # (scripts referenced by entry: must exist and be executable, and
+  # helper scripts installed as a pair with a hook must be present)
+  # ----------------------------------------------------------------
+  - repo: local
+    hooks:
+      - id: check-hook-scripts
+        name: Check hook scripts exist
+        language: script
+        entry: scripts/check-hook-scripts.sh
+        pass_filenames: false
+        always_run: true
